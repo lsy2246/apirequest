@@ -29,7 +29,7 @@ python3 desktop/src-tauri/tests/smoke.py desktop/src-tauri/target/debug/apireque
 
 Windows 使用 `--bundles nsis`，调试可执行文件以 `.exe` 结尾。窗口测试使用独立数据目录和回环端口。
 
-普通提交推送到 `master`、以及向 `master` 提交 PR 时运行 CI 测试。推送 `v版本号` 标签时运行桌面 CD，构建 Windows x64、macOS Apple Silicon 和 macOS Intel 安装包，三种平台均通过窗口验收后发布到 GitHub Releases。Docker 镜像通过单独的手动任务发布。
+普通提交推送到 `master`、以及向 `master` 提交 PR 时运行 CI 测试。推送 `v版本号` 标签时运行桌面 CD，构建 Windows x64 和 macOS Apple Silicon（ARM64）安装包，两种平台均通过窗口验收后发布到 GitHub Releases。Docker 镜像通过单独的手动任务发布。
 
 发布时先用 `npm --prefix desktop version patch --no-git-tag-version` 更新版本，提交并推送到 `master`，确认 CI 通过，再为该提交创建并推送同版本标签。例如应用版本为 `0.1.1` 时：
 

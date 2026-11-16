@@ -45,11 +45,6 @@ jobs:
             bundle: dmg
             executable: desktop/src-tauri/target/debug/apirequest-native
             installer: desktop/src-tauri/target/release/bundle/dmg/*.dmg
-          - platform: macos-x64
-            runner: macos-15-intel
-            bundle: dmg
-            executable: desktop/src-tauri/target/debug/apirequest-native
-            installer: desktop/src-tauri/target/release/bundle/dmg/*.dmg
     steps:
       - uses: actions/checkout@v4
         with:
@@ -122,7 +117,7 @@ jobs:
         run: |
           tag="v${VERSION}"
           files=(installers/*)
-          [[ "${#files[@]}" -eq 3 ]] || { echo 'Expected three installers'; exit 1; }
+          [[ "${#files[@]}" -eq 2 ]] || { echo 'Expected two installers'; exit 1; }
           existing_commit=$(gh api "repos/$GH_REPO/commits/$tag" --jq '.sha')
           if [[ "$existing_commit" != "$RELEASE_COMMIT" ]]; then
             echo 'Version tag points to a different commit'
