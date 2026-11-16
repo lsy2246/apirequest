@@ -83,10 +83,8 @@ jobs:
           python desktop/src-tauri/tests/smoke.py "$NATIVE_EXECUTABLE"
       - name: Package installer
         working-directory: desktop
-        env:
-          NATIVE_BUNDLE: ${{ matrix.bundle }}
-        shell: bash
-        run: npm exec --yes --package=@tauri-apps/cli@2.11.3 -- tauri build --ci --bundles "$NATIVE_BUNDLE"
+        # Windows needs its native Perl; Git Bash selects an incomplete MSYS Perl.
+        run: npm exec --yes --package=@tauri-apps/cli@2.11.3 -- tauri build --ci --bundles ${{ matrix.bundle }}
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.platform }}
