@@ -1,9 +1,8 @@
-name: Release apirequest Desktop
+name: Desktop CD
 
 on:
   push:
-    branches: [main]
-    paths: [desktop/package.json]
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -13,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
-      changed: ${{ steps.version.outputs.changed }}
+      commit: ${{ steps.version.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,12 +23,11 @@ jobs:
           node-version: 24
       - id: version
         env:
-          BASE_SHA: ${{ github.event.before }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: node desktop/release-version.cjs
 
   build:
     needs: version
-    if: needs.version.outputs.changed == 'true'
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 50
@@ -55,6 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.version.outputs.commit }}
           persist-credentials: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -118,21 +117,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.version.outputs.version }}
+          RELEASE_COMMIT: ${{ needs.version.outputs.commit }}
         shell: bash
         run: |
           tag="v${VERSION}"
           files=(installers/*)
           [[ "${#files[@]}" -eq 3 ]] || { echo 'Expected three installers'; exit 1; }
-          existing_commit=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null || true)
-          if [[ -n "$existing_commit" && "$existing_commit" != "$GITHUB_SHA" ]]; then
-            echo 'Version tag already points to a different commit'
+          existing_commit=$(gh api "repos/$GH_REPO/commits/$tag" --jq '.sha')
+          if [[ "$existing_commit" != "$RELEASE_COMMIT" ]]; then
+            echo 'Version tag points to a different commit'
             exit 1
           fi
           if gh release view "$tag" --json isDraft,targetCommitish > release.json 2>/dev/null; then
-            [[ $(jq -r .targetCommitish release.json) == "$GITHUB_SHA" ]] || exit 1
+            [[ $(jq -r .targetCommitish release.json) == "$RELEASE_COMMIT" ]] || exit 1
             [[ $(jq -r .isDraft release.json) == true ]] || exit 0
           else
-            gh release create "$tag" --target "$GITHUB_SHA" --title "apirequest $VERSION" --generate-notes --draft
+            gh release create "$tag" --target "$RELEASE_COMMIT" --title "API Request $VERSION" --generate-notes --draft
           fi
           gh release upload "$tag" "${files[@]}" --clobber
           gh release edit "$tag" --draft=false

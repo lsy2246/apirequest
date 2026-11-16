@@ -2,9 +2,9 @@ name: Node.js CI
 
 on:
   push:
-    branches: [master, main, next, patch]
+    branches: [master]
   pull_request:
-    branches: [master, main, next, patch]
+    branches: [master]
 
 jobs:
   test:
@@ -32,6 +32,9 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+
+      - name: Test desktop release validation
+        run: node --test desktop/release-version.test.cjs
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts

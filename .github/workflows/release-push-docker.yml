@@ -1,12 +1,7 @@
-name: "Push containers to Docker Hub on release"
+name: "Publish Docker images manually"
 
 on:
-  push:
-    tags:
-      - '*.*.*'
   workflow_dispatch:
-    inputs:
-      # NO INPUTS
 
 jobs:
   build:

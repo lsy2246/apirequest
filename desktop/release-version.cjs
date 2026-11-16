@@ -11,19 +11,19 @@ function parse(value) {
   return parts;
 }
 
-const next = parse(version);
-const before = process.env.BASE_SHA;
-if (!/^[a-f0-9]{40}$/.test(before ?? '')) throw new Error('Invalid base commit');
-let previous;
-if (before !== '0'.repeat(40)) {
-  const files = execFileSync('git', ['ls-tree', '--name-only', before, '--', 'desktop/package.json'], { encoding: 'utf8' });
-  if (files.trim()) {
-    previous = JSON.parse(execFileSync('git', ['show', `${before}:desktop/package.json`], { encoding: 'utf8' })).version;
-    const current = parse(previous);
-    const firstDifference = next.findIndex((part, index) => part !== current[index]);
-    if (firstDifference !== -1 && next[firstDifference] < current[firstDifference]) {
-      throw new Error(`Desktop version cannot go backwards (${previous} to ${version})`);
-    }
-  }
+parse(version);
+const tag = process.env.RELEASE_TAG;
+if (tag !== `v${version}`) {
+  throw new Error(`Release tag must match desktop/package.json (expected v${version}, received ${tag})`);
 }
-appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nchanged=${version !== previous}\n`);
+const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+const commit = git('rev-parse', 'HEAD');
+if (git('rev-parse', `refs/tags/${tag}^{commit}`) !== commit) {
+  throw new Error('Checkout must match the release tag');
+}
+try {
+  git('merge-base', '--is-ancestor', commit, 'refs/remotes/origin/master');
+} catch {
+  throw new Error('Release commit must belong to master');
+}
+appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\ncommit=${commit}\n`);

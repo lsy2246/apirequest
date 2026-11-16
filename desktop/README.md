@@ -29,7 +29,16 @@ python3 desktop/src-tauri/tests/smoke.py desktop/src-tauri/target/debug/apireque
 
 Windows 使用 `--bundles nsis`，调试可执行文件以 `.exe` 结尾。窗口测试使用独立数据目录和回环端口。
 
-`npm --prefix desktop version patch --no-git-tag-version` 更新版本。含新版本的提交进入 `main` 后，发版流程构建 Windows x64、macOS Apple Silicon 和 macOS Intel 安装包，并在三种平台都通过窗口验收后发布。原生前端独立构建。团队后端的 GraphQL 文档由网页版生成和加载，原生客户端直接向用户填写的 GraphQL 地址发送请求。
+普通提交推送到 `master`、以及向 `master` 提交 PR 时运行 CI 测试。推送 `v版本号` 标签时运行桌面 CD，构建 Windows x64、macOS Apple Silicon 和 macOS Intel 安装包，三种平台均通过窗口验收后发布到 GitHub Releases。Docker 镜像通过单独的手动任务发布。
+
+发布时先用 `npm --prefix desktop version patch --no-git-tag-version` 更新版本，提交并推送到 `master`，确认 CI 通过，再为该提交创建并推送同版本标签。例如应用版本为 `0.1.1` 时：
+
+```sh
+git tag -a v0.1.1 -m "API Request 0.1.1"
+git push origin v0.1.1
+```
+
+CD 要求标签与 `desktop/package.json` 版本完全一致，且标签提交属于 `master`；轻量标签和附注标签均受支持。只修改版本文件而不推送标签时仍仅运行 CI。原生前端独立构建。团队后端的 GraphQL 文档由网页版生成和加载，原生客户端直接向用户填写的 GraphQL 地址发送请求。
 
 ## 流量抓包
 
