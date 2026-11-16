@@ -3,7 +3,6 @@ import { assertLocalWorkspaceRequest, getLocalWorkspaceConfig } from './policy';
 
 const config = (extra: Record<string, string> = {}) =>
   new ConfigService({
-    HOPP_SINGLE_USER_MODE: 'true',
     VITE_BASE_URL: 'http://127.0.0.1:3000',
     VITE_BACKEND_GQL_URL: 'http://127.0.0.1:3170/graphql',
     ...extra,
@@ -14,10 +13,13 @@ const request = () => ({
 });
 
 describe('本机工作区来源边界', () => {
-  it('未启用时不提供自动本地身份', () => {
-    expect(
-      getLocalWorkspaceConfig(config({ HOPP_SINGLE_USER_MODE: 'false' })),
-    ).toBeUndefined();
+  it('无需模式开关即可提供固定工作区配置', () => {
+    expect(getLocalWorkspaceConfig(config())).toEqual({
+      origins: ['http://127.0.0.1:3000'],
+      host: '127.0.0.1:3170',
+      bindHost: '127.0.0.1',
+      allowLAN: false,
+    });
   });
   it.each([
     { VITE_BASE_URL: 'https://example.com' },
@@ -76,4 +78,67 @@ describe('本机工作区来源边界', () => {
       ),
     ).toThrow();
   });
+
+  const lanConfig = (extra: Record<string, string> = {}) =>
+    config({
+      APIREQUEST_ALLOW_LAN_ACCESS: 'true',
+      VITE_BASE_URL: 'https://192.168.1.68:3300',
+      VITE_BACKEND_GQL_URL: 'https://192.168.1.68:3300/graphql',
+      ...extra,
+    });
+  it('显式启用内网后绑定指定地址，并允许真实内网连接', () => {
+    const settings = getLocalWorkspaceConfig(lanConfig());
+    expect(settings.bindHost).toBe('192.168.1.68');
+    expect(() =>
+      assertLocalWorkspaceRequest(
+        {
+          headers: {
+            host: '192.168.1.68:3300',
+            origin: 'https://192.168.1.68:3300',
+          },
+          socket: { remoteAddress: '::ffff:192.168.1.20' },
+        },
+        settings,
+      ),
+    ).not.toThrow();
+  });
+  it.each([
+    { APIREQUEST_ALLOW_LAN_ACCESS: 'false' },
+    { VITE_BASE_URL: 'https://example.com' },
+    { VITE_BACKEND_GQL_URL: 'https://8.8.8.8/graphql' },
+    { VITE_BASE_URL: 'https://192.168.1.69:3300' },
+    { TRUST_PROXY: 'true' },
+  ])('拒绝未授权或不一致的内网配置 %j', (extra) => {
+    expect(() => getLocalWorkspaceConfig(lanConfig(extra))).toThrow();
+  });
+  it.each([
+    {
+      address: '203.0.113.1',
+      host: '192.168.1.68:3300',
+      origin: 'https://192.168.1.68:3300',
+    },
+    {
+      address: '192.168.1.20',
+      host: 'evil.test:3300',
+      origin: 'https://192.168.1.68:3300',
+    },
+    {
+      address: '192.168.1.20',
+      host: '192.168.1.68:3300',
+      origin: 'https://evil.test',
+    },
+  ])(
+    '内网模式仍拒绝错误的连接、Host 或来源 %j',
+    ({ address, host, origin }) => {
+      expect(() =>
+        assertLocalWorkspaceRequest(
+          {
+            headers: { host, origin, 'x-forwarded-for': '192.168.1.1' },
+            socket: { remoteAddress: address },
+          },
+          getLocalWorkspaceConfig(lanConfig()),
+        ),
+      ).toThrow();
+    },
+  );
 });

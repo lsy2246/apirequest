@@ -14,6 +14,7 @@ const services = vi.hoisted(() => ({
   getEnvironmentByKey: vi.fn(),
 }))
 vi.mock("dioc/vue", () => ({ useService: () => services }))
+vi.mock("~/modules/dioc", () => ({ getService: () => services }))
 vi.mock("~/services/tab/workspace-tabs", () => ({
   WorkspaceTabsService: class {},
 }))

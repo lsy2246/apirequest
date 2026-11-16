@@ -11,6 +11,11 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      // This package publishes its ESM entry but points `main` at a missing UMD file.
+      "vuedraggable-es": path.resolve(
+        __dirname,
+        "node_modules/vuedraggable-es/dist/index.es.js"
+      ),
       "~": path.resolve(__dirname, "../apirequest-common/src"),
       "@composables": path.resolve(
         __dirname,

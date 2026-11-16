@@ -22,7 +22,6 @@ vi.mock("~/platform", () => ({
   platform: {
     backend: {
       getUserPublishedDocs: vi.fn(),
-      getTeamPublishedDocs: vi.fn(),
     },
   },
 }))
@@ -504,42 +503,6 @@ describe("DocumentationService", () => {
       ])
     })
 
-    it("should fetch team published docs and update map", async () => {
-      const mockDocs = [
-        {
-          id: "doc-2",
-          title: "Doc 2",
-          version: "v2",
-          autoSync: false,
-          url: "url-2",
-          collection: { id: "col-2" },
-          createdOn: new Date().toISOString(),
-          updatedOn: new Date().toISOString(),
-        },
-      ]
-
-      vi.mocked(getWebBackend().getTeamPublishedDocs).mockReturnValue(() =>
-        Promise.resolve(E.right(mockDocs as any))
-      )
-
-      await service.fetchTeamPublishedDocs("team-1")
-
-      const status = service.getPublishedDocStatus("col-2")
-
-      expect(status).toEqual([
-        {
-          id: "doc-2",
-          title: "Doc 2",
-          version: "v2",
-          autoSync: false,
-          url: "url-2",
-          collection: { id: "col-2" },
-          createdOn: mockDocs[0].createdOn,
-          updatedOn: mockDocs[0].updatedOn,
-        },
-      ])
-    })
-
     it("should handle error when fetching user published docs", async () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
       vi.mocked(getWebBackend().getUserPublishedDocs).mockReturnValue(() =>
@@ -551,21 +514,6 @@ describe("DocumentationService", () => {
       expect(consoleSpy).toHaveBeenCalledWith(
         "Failed to fetch user published docs:",
         "user/not_authenticated"
-      )
-      consoleSpy.mockRestore()
-    })
-
-    it("should handle error when fetching team published docs", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
-      vi.mocked(getWebBackend().getTeamPublishedDocs).mockReturnValue(() =>
-        Promise.resolve(E.left("team/not_required" as any))
-      )
-
-      await service.fetchTeamPublishedDocs("team-1")
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "Failed to fetch team published docs:",
-        "team/not_required"
       )
       consoleSpy.mockRestore()
     })

@@ -2,7 +2,14 @@ import { Body } from '@nestjs/common';
 import { AdoptLocalCollectionsDto } from './adopt-collections.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { LOCAL_WORKSPACE_UID } from './policy';
-import { Controller, Get, Post, Req, Res, NotFoundException, ForbiddenException, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Req,
+  Res,
+  ForbiddenException,
+  UseGuards,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { ThrottlerBehindProxyGuard } from 'src/guards/throttler-behind-proxy.guard';
@@ -19,15 +26,9 @@ export class LocalWorkspaceController {
     private readonly workspace: LocalWorkspaceService,
   ) {}
 
-  @Get('session-mode')
-  mode() {
-    return { singleUser: !!getLocalWorkspaceConfig(this.config) };
-  }
-
   @Post('local-session')
   async connect(@Req() request: Request, @Res() response: Response) {
     const config = getLocalWorkspaceConfig(this.config);
-    if (!config) throw new NotFoundException();
     assertLocalWorkspaceRequest(request, config);
     // 只能由配置的工作台 AJAX 请求建立会话；普通跨站表单及无来源请求不得领取身份。
     if (
@@ -51,7 +52,6 @@ export class LocalWorkspaceController {
     @Body() body: AdoptLocalCollectionsDto,
   ) {
     const config = getLocalWorkspaceConfig(this.config);
-    if (!config) throw new NotFoundException();
     assertLocalWorkspaceRequest(request, config);
     if (
       request.user.uid !== LOCAL_WORKSPACE_UID ||
@@ -72,7 +72,6 @@ export class LocalWorkspaceController {
     @Body() body: unknown,
   ) {
     const config = getLocalWorkspaceConfig(this.config);
-    if (!config) throw new NotFoundException();
     assertLocalWorkspaceRequest(request, config);
     if (
       request.user.uid !== LOCAL_WORKSPACE_UID ||

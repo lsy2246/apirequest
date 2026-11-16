@@ -1,8 +1,20 @@
-import { Body, Controller, ForbiddenException, Get, Header, NotFoundException, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Header,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { LOCAL_WORKSPACE_UID, getLocalWorkspaceConfig } from '../auth/local-workspace/policy';
+import { LOCAL_WORKSPACE_UID } from '../auth/local-workspace/policy';
 import { ThrottlerBehindProxyGuard } from '../guards/throttler-behind-proxy.guard';
 import { WorkbenchHistoryResultsService } from './workbench-history-results.service';
 
@@ -11,13 +23,9 @@ type AuthRequest = Request & { user: { uid: string } };
 @Controller({ path: 'workbench-history-results', version: '1' })
 @UseGuards(ThrottlerBehindProxyGuard, JwtAuthGuard)
 export class WorkbenchHistoryResultsController {
-  constructor(
-    private readonly results: WorkbenchHistoryResultsService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly results: WorkbenchHistoryResultsService) {}
 
   private owner(request: AuthRequest) {
-    if (!getLocalWorkspaceConfig(this.config)) throw new NotFoundException();
     if (request.user.uid !== LOCAL_WORKSPACE_UID)
       throw new ForbiddenException();
     return request.user.uid;

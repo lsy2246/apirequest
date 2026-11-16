@@ -14,7 +14,6 @@ const buildEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) =
   !key.startsWith('VITE_') && key !== 'HOPP_ALLOW_RUNTIME_ENV'
 ));
 Object.assign(buildEnv, {
-  HOPP_SINGLE_USER_MODE: 'true',
   VITE_BASE_URL: 'tauri://localhost',
   WORKBENCH_NATIVE_BUILD: 'true',
 });

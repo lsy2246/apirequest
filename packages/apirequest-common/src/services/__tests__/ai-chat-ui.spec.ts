@@ -32,22 +32,23 @@ const auth = vi.hoisted(() => ({
   user$: null as null | { value: unknown; next(v: unknown): void },
 }))
 vi.mock("~/platform", () => ({
+  isLocalWorkbench: () => true,
   platform: {
     experiments: { aiExperiments: ai },
     auth: {
       getCurrentUser: () => auth.user$!.value,
       getCurrentUserStream: () => auth.user$,
       getProbableUser: () => null,
+      waitProbableLoginToConfirm: async () => {},
     },
-    // The team list stays pending; nothing here reads it.
-    backend: { getUserTeams: () => new Promise(() => {}) },
+    backend: { getUserPublishedDocs: () => async () => ({ _tag: "Right", right: [] }) },
     platformFeatureFlags: {},
   },
 }))
 // Pages set the document title; no head manager here.
 vi.mock("@composables/head", () => ({ usePageHead: () => {} }))
 
-// Workspace services start team queries on login; keep them off the network.
+// Keep workspace queries off the network.
 vi.mock("~/helpers/backend/GQLClient", async (orig) => ({
   ...(await orig<object>()),
   runGQLQuery: () => new Promise(() => {}),
@@ -68,15 +69,12 @@ import { WorkspaceService } from "~/services/workspace.service"
 import { defineActionHandler } from "~/helpers/actions"
 import { hookKeybindingsListener } from "~/helpers/keybindings"
 import { applySetting } from "~/newstore/settings"
-import { TeamAccessRole } from "~/services/workspace.service"
-import TeamEnvironmentAdapter from "~/helpers/teams/TeamEnvironmentAdapter"
 import {
   useAIExperimentsSupport,
   useRequestNameGeneration,
 } from "~/composables/ai-experiments"
 import Settings from "~/pages/settings.vue"
 import DefaultLayout from "~/layouts/default.vue"
-import { PersistenceService } from "~/services/persistence"
 import { useChatContext } from "~/composables/chat-context"
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
 import { getDefaultRESTRequest } from "~/helpers/rest/default"
@@ -605,26 +603,6 @@ describe("AI assistant UI", () => {
   })
 
   describe("context", () => {
-    it("loads team environments only once the pane is used", async () => {
-      const init = vi
-        .spyOn(TeamEnvironmentAdapter.prototype, "initialize")
-        .mockResolvedValue()
-      getAvailability.mockResolvedValue(on(true))
-      await mount()
-      await signIn()
-      workspace.changeWorkspace({
-        type: "team",
-        teamID: "team_1",
-        teamName: "Acme",
-        role: TeamAccessRole.Owner,
-      })
-      await nextTick()
-      expect(init).not.toHaveBeenCalled()
-
-      launcher()!.click()
-      await nextTick()
-      expect(init).toHaveBeenCalledTimes(1)
-    })
 
     /** The context a turn would send for `request` in the active tab. */
     const contextWith = async (
@@ -911,9 +889,6 @@ describe("default layout", () => {
   /** Whether the layout set the assistant up at all. */
   const mountsAssistant = async () => {
     const setUp = vi.fn()
-    vi.spyOn(PersistenceService.prototype, "getLocalConfig").mockResolvedValue(
-      "yes"
-    )
     auth.user$ = new BehaviorSubject<unknown>(null)
     const router = createRouter({
       history: createMemoryHistory(),

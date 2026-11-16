@@ -285,7 +285,7 @@ describe.each(NAMESPACES)("%s.expect() - Core Chai Assertions", (namespace) => {
         runTest(`
           ${namespace}.test("include assertions", () => {
             ${namespace}.expect([1, 2, 3]).to.include(2)
-            ${namespace}.expect('apirequest').to.include('hopp')
+            ${namespace}.expect('apirequest').to.include('api')
             ${namespace}.expect({a: 1, b: 2}).to.include({a: 1})
             ${namespace}.expect([1, 2, 3]).to.not.include(5)
           })
@@ -296,12 +296,12 @@ describe.each(NAMESPACES)("%s.expect() - Core Chai Assertions", (namespace) => {
           children: [
             expect.objectContaining({
               descriptor: "include assertions",
-              expectResults: expect.arrayContaining([
+              expectResults: [
                 expect.objectContaining({ status: "pass" }),
                 expect.objectContaining({ status: "pass" }),
                 expect.objectContaining({ status: "pass" }),
                 expect.objectContaining({ status: "pass" }),
-              ]),
+              ],
             }),
           ],
         }),

@@ -21,10 +21,7 @@ import { workbenchCapture } from "./capture/plugin"
 const nativeBuild = process.env.WORKBENCH_NATIVE_BUILD === "true"
 const ENV = nativeBuild
   ? process.env
-  : loadEnv("development", path.resolve(__dirname, "../../"), [
-      "VITE_",
-      "HOPP_SINGLE_USER_MODE",
-    ])
+  : loadEnv("development", path.resolve(__dirname, "../../"), "VITE_")
 const captureEnv = nativeBuild
   ? {}
   : loadEnv(
@@ -34,7 +31,6 @@ const captureEnv = nativeBuild
     )
 const captureEnabled =
   !nativeBuild &&
-  ENV.HOPP_SINGLE_USER_MODE === "true" &&
   !!captureEnv.APIREQUEST_CAPTURE_EXECUTABLE &&
   !!captureEnv.APIREQUEST_CAPTURE_CA_DIR
 
@@ -42,11 +38,7 @@ function canonicalLocalWorkspace(): Plugin {
   return {
     name: "canonical-local-workspace",
     configureServer(server) {
-      if (
-        ENV.HOPP_SINGLE_USER_MODE !== "true" ||
-        !URL.canParse(ENV.VITE_BASE_URL)
-      )
-        return
+      if (!URL.canParse(ENV.VITE_BASE_URL)) return
 
       const base = new URL(ENV.VITE_BASE_URL)
       const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"]

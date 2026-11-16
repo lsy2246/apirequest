@@ -2,13 +2,13 @@ import { BadRequestException } from '@nestjs/common';
 import { UserCollectionService } from 'src/user-collection/user-collection.service';
 import { ReqType } from 'src/types/RequestTypes';
 import { ReqType as DBReqType } from 'src/generated/prisma/client';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as E from 'fp-ts/Either';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthService } from '../auth.service';
-import { LOCAL_WORKSPACE_UID, getLocalWorkspaceConfig } from './policy';
+import { LOCAL_WORKSPACE_UID } from './policy';
 import { throwHTTPErr } from 'src/utils';
 
 @Injectable()
@@ -24,7 +24,6 @@ export class LocalWorkspaceService {
   private adoptionQueue: Promise<void> = Promise.resolve();
 
   async adoptCollections(json: string, type: 'REST' | 'GQL') {
-    if (!getLocalWorkspaceConfig(this.config)) throw new NotFoundException();
     const incoming: unknown = JSON.parse(json);
     if (
       !Array.isArray(incoming) ||
@@ -76,7 +75,6 @@ export class LocalWorkspaceService {
   }
 
   async establishSession(accessToken?: string) {
-    if (!getLocalWorkspaceConfig(this.config)) throw new NotFoundException();
     // 独立固定归属，不复用邮箱账户或测试账户；并发打开标签时依靠数据库主键保证只创建一份。
     await this.prisma.user.upsert({
       where: { uid: LOCAL_WORKSPACE_UID },

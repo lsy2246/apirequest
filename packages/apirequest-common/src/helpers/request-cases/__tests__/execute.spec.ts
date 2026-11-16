@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { getDefaultRESTRequest } from "@apirequest/data"
 import * as E from "fp-ts/Either"
+const requestFixture = () => ({ ...getDefaultRESTRequest(), endpoint: "http://example.test" })
 vi.mock("~/modules/dioc", () => ({ getService: vi.fn() }))
 vi.mock("~/services/cookie-jar.service", () => ({ CookieJarService: class {} }))
 vi.mock("~/platform", () => ({
@@ -90,7 +91,7 @@ describe("case execution", () => {
   it("checks a full response, inherits scripts and preserves an explicitly empty variable", async () => {
     const entry = newRequestCase()
     entry.variables = { empty: "" }
-    const base = getDefaultRESTRequest()
+    const base = requestFixture()
     base.endpoint = "http://example.test"
     base.preRequestScript = "before"
     base.testScript = "after"
@@ -148,7 +149,7 @@ describe("case execution", () => {
       response: Promise.resolve(network()),
     })
     const result = await executeRequestCase(
-      getDefaultRESTRequest(),
+      requestFixture(),
       entry,
       {
         headers: [],
@@ -169,7 +170,7 @@ describe("case execution", () => {
     const execute = vi.fn()
     await expect(
       executeRequestCase(
-        getDefaultRESTRequest(),
+        requestFixture(),
         newRequestCase(),
         undefined,
         { execute } as any,
@@ -189,7 +190,7 @@ describe("case execution", () => {
       response: Promise.resolve(unauthorized),
     }))
     const result = await executeRequestCase(
-      getDefaultRESTRequest(),
+      requestFixture(),
       entry,
       undefined,
       { execute } as any,
@@ -212,7 +213,7 @@ describe("case execution", () => {
       execute = vi.fn(() => ({ cancel, response: new Promise(() => {}) })),
       controller = new AbortController()
     const promise = executeRequestCase(
-      getDefaultRESTRequest(),
+      requestFixture(),
       newRequestCase(),
       undefined,
       { execute } as any,
@@ -234,7 +235,7 @@ describe("case execution", () => {
     const execute = vi.fn(),
       controller = new AbortController()
     const promise = executeRequestCase(
-      getDefaultRESTRequest(),
+      requestFixture(),
       newRequestCase(),
       undefined,
       { execute } as any,

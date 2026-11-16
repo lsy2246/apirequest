@@ -11,6 +11,8 @@ import { emitGQLSchemaFile } from './gql-schema';
 import morgan from 'morgan';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 function warnIfExampleSecrets(configService: ConfigService): void {
   if (
@@ -35,7 +37,22 @@ function warnIfExampleSecrets(configService: ConfigService): void {
 }
 
 export async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const tlsCert = process.env.APIREQUEST_TLS_CERT;
+  const tlsKey = process.env.APIREQUEST_TLS_KEY;
+  if (!!tlsCert !== !!tlsKey)
+    throw new Error(
+      'Configure both APIREQUEST_TLS_CERT and APIREQUEST_TLS_KEY',
+    );
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    ...(tlsCert && tlsKey
+      ? {
+          httpsOptions: {
+            cert: readFileSync(tlsCert),
+            key: readFileSync(tlsKey),
+          },
+        }
+      : {}),
+  });
 
   const configService = app.get(ConfigService);
   const isProduction = configService.get('PRODUCTION') === 'true';
@@ -79,44 +96,29 @@ export async function bootstrap() {
   );
 
   const localWorkspace = getLocalWorkspaceConfig(configService);
-  if (localWorkspace) {
-    // 本机无交互模式保留所有业务鉴权，仅限制可领取会话及发起写操作的来源。
-    app.use((req, res, next) => {
-      try {
-        const publicEndpoint =
-          req.path.startsWith('/mock/') ||
-          req.path.startsWith('/v1/published-docs/');
-        const needsOrigin =
-          !['GET', 'HEAD', 'OPTIONS'].includes(req.method) ||
-          (req.path.startsWith('/v1/auth/') &&
-            req.path !== '/v1/auth/session-mode');
-        assertLocalWorkspaceRequest(
-          req,
-          localWorkspace,
-          needsOrigin,
-          publicEndpoint,
-        );
-        next();
-      } catch {
-        res
-          .status(403)
-          .json({ message: 'Local workspace request is not allowed' });
-      }
-    });
-    app.enableCors({ origin: localWorkspace.origins, credentials: true });
-  } else if (isProduction) {
-    console.log('Enabling CORS with production settings');
-    app.enableCors({
-      origin: configService.get('WHITELISTED_ORIGINS').split(','),
-      credentials: true,
-    });
-  } else {
-    console.log('Enabling CORS with development settings');
-    app.enableCors({
-      origin: true,
-      credentials: true,
-    });
-  }
+  // 固定单人工作区，所有会话和写操作使用同一份来源边界。
+  app.use((req, res, next) => {
+    try {
+      const publicEndpoint =
+        req.path.startsWith('/mock/') ||
+        req.path.startsWith('/v1/published-docs/');
+      const needsOrigin =
+        !['GET', 'HEAD', 'OPTIONS'].includes(req.method) ||
+        req.path.startsWith('/v1/auth/');
+      assertLocalWorkspaceRequest(
+        req,
+        localWorkspace,
+        needsOrigin,
+        publicEndpoint,
+      );
+      next();
+    } catch {
+      res
+        .status(403)
+        .json({ message: 'Local workspace request is not allowed' });
+    }
+  });
+  app.enableCors({ origin: localWorkspace.origins, credentials: true });
 
   app.enableVersioning({
     type: VersioningType.URI,
@@ -130,17 +132,22 @@ export async function bootstrap() {
     }),
   );
 
-  if (configService.get('TRUST_PROXY') === 'true') {
-    console.log('Enabling trust proxy');
-    app.set('trust proxy', true);
+  // Optional single-origin web deployment, sharing the API's network boundary.
+  const webRoot = configService.get<string>('APIREQUEST_WEB_ROOT');
+  if (webRoot) {
+    const root = resolve(webRoot);
+    app.useStaticAssets(root);
+    app.use((req, res, next) => {
+      const apiPath = /^\/(v1|graphql|mock|health)(\/|$)/.test(req.path);
+      if (req.method === 'GET' && !apiPath && req.accepts('html'))
+        return res.sendFile(resolve(root, 'index.html'));
+      next();
+    });
   }
 
   app.use(morgan(':remote-addr :method :url :status - :response-time ms'));
 
-  await app.listen(
-    configService.get('PORT') || 3170,
-    localWorkspace ? '127.0.0.1' : '0.0.0.0',
-  );
+  await app.listen(configService.get('PORT') || 3170, localWorkspace.bindHost);
 
   return app;
 }

@@ -9,6 +9,7 @@
   "scripts": {
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
+    "ci:prepare": "node scripts/prepare-ci.cjs",
     "dev": "pnpm -r do-dev",
     "gen-gql": "cross-env GQL_SCHEMA_EMIT_LOCATION='../../../gql-gen/backend-schema.gql' pnpm -r generate-gql-sdl",
     "generate": "pnpm -r do-build-prod",

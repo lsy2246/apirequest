@@ -181,15 +181,13 @@ describe("Mock panel workflows", () => {
     expect(target.querySelector("article")).toBeNull()
     expect(target.textContent).toContain("mock_tools.inspect")
     expect(mocks.api).not.toHaveBeenCalledWith(`${server.id}/logs?skip=0`)
-    const check = target.querySelector<HTMLInputElement>(
-      "input[type=checkbox]"
-    )!
+    const check = target.querySelector<HTMLButtonElement>("[role=switch]")!
     expect(check).not.toBeNull()
-    const recording = target.querySelectorAll<HTMLInputElement>(
-      "input[type=checkbox]"
+    const recording = target.querySelectorAll<HTMLButtonElement>(
+      "[role=switch]"
     )[1]
-    recording.checked = true
-    recording.dispatchEvent(new Event("change", { bubbles: true }))
+    expect(recording.getAttribute("aria-checked")).toBe("false")
+    recording.click()
     click(target, "action.save")
     await settle()
     expect(mocks.api).toHaveBeenCalledWith(server.id, {

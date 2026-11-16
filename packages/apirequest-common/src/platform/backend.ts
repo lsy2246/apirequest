@@ -1,20 +1,9 @@
-import { WorkspaceType } from "~/helpers/backend/enums";
 import * as TE from "fp-ts/TaskEither";
 import { GQLError } from "~/helpers/backend/GQLClient";
 import type { CreatePublishedDocMutation, CreatePublishedDocsArgs, DeletePublishedDocMutation, GetMockServerLogsQuery, PublishedDocQuery, UpdatePublishedDocMutation, UpdatePublishedDocsArgs, UserPublishedDocsListQuery } from "~/helpers/backend/graphql";
 import type { MockServer } from "~/helpers/backend/types/MockServer";
 export type BackendPlatformDef = {
   // Mock server operations
-  createMockServer: (
-    name: string,
-    workspaceType?: WorkspaceType,
-    workspaceID?: string,
-    delayInMs?: number,
-    isPublic?: boolean,
-    collectionID?: string,
-    autoCreateCollection?: boolean,
-    autoCreateRequestExample?: boolean
-  ) => TE.TaskEither<string, MockServer>
   updateMockServer: (
     id: string,
     input: {
@@ -60,7 +49,6 @@ export type BackendPlatformDef = {
 }
 export type LocalMockBackend = Pick<
   BackendPlatformDef,
-  | "createMockServer"
   | "updateMockServer"
   | "deleteMockServer"
   | "getMockServer"

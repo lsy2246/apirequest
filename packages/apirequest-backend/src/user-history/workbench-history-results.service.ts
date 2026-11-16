@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +17,7 @@ import { pipeline } from 'node:stream/promises';
 import type { Request } from 'express';
 import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { LOCAL_WORKSPACE_UID, getLocalWorkspaceConfig } from '../auth/local-workspace/policy';
+import { LOCAL_WORKSPACE_UID } from '../auth/local-workspace/policy';
 
 const day = 86_400_000;
 const kinds = ['json', 'text', 'image', 'video', 'file'] as const;
@@ -108,7 +114,7 @@ export class WorkbenchHistoryResultsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
+    config: ConfigService,
   ) {
     this.root =
       config.get<string>('WORKBENCH_HISTORY_RESULTS_DIR') ??
@@ -513,7 +519,6 @@ export class WorkbenchHistoryResultsService {
   }
 
   reapDeletedHistory() {
-    if (!getLocalWorkspaceConfig(this.config)) return;
     this.pendingRemoval ??= this.removeDeletedFiles()
       .catch(() =>
         this.logger.warn('History result file removal will be retried'),
@@ -566,8 +571,7 @@ export class WorkbenchHistoryResultsService {
 
   @Cron('0 * * * * *')
   async maintenance() {
-    if (this.maintenanceRunning || !getLocalWorkspaceConfig(this.config))
-      return;
+    if (this.maintenanceRunning) return;
     this.maintenanceRunning = true;
     try {
       const policy = await this.policy(LOCAL_WORKSPACE_UID);

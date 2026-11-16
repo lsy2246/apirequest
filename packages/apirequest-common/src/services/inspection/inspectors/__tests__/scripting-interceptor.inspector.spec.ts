@@ -1,5 +1,5 @@
 import { TestContainer } from "dioc/testing"
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { ScriptingInterceptorInspectorService } from "../scripting-interceptor.inspector"
 import { InspectionService } from "../../index"
 import { getDefaultRESTRequest } from "~/helpers/rest/default"
@@ -34,28 +34,6 @@ vi.mock("~/modules/i18n", () => ({
 
 // Import platform after mocking to get the mocked version
 import { platform } from "~/platform"
-
-// Mock window.location for same-origin detection tests
-const originalLocation = global.window?.location
-beforeEach(() => {
-  if (global.window) {
-    delete (global.window as any).location
-    global.window.location = {
-      ...originalLocation,
-      origin: "https://example.com",
-      href: "https://example.com/",
-      hostname: "example.com",
-    } as any
-  }
-})
-
-afterEach(() => {
-  // Restore original location to prevent test leakage
-  if (global.window && originalLocation) {
-    delete (global.window as any).location
-    global.window.location = originalLocation
-  }
-})
 
 describe("ScriptingInterceptorInspectorService", () => {
   it("registers with the inspection service upon initialization", () => {
@@ -119,7 +97,7 @@ describe("ScriptingInterceptorInspectorService", () => {
 
       const req = ref({
         ...getDefaultRESTRequest(),
-        testScript: "pm.sendRequest('https://example.com/api/data', () => {})",
+        testScript: `await fetch('${window.location.origin}/api/data')`,
       })
 
       const result = inspector.getInspections(req, ref(null))
@@ -132,7 +110,7 @@ describe("ScriptingInterceptorInspectorService", () => {
       )
     })
 
-    it("should warn for pm.sendRequest with request object containing relative URL", () => {
+    it("should warn for hopp.fetch with a relative URL in the test script", () => {
       const container = new TestContainer()
 
       container.bindMock(KernelInterceptorService, {
@@ -146,12 +124,7 @@ describe("ScriptingInterceptorInspectorService", () => {
       const req = ref({
         ...getDefaultRESTRequest(),
         testScript: `
-          pm.sendRequest({
-            url: '/api/users',
-            method: 'POST'
-          }, (err, res) => {
-            pm.expect(res.code).toBe(200)
-          })
+          await hopp.fetch('/api/users', { method: 'POST' })
         `,
       })
 
@@ -165,7 +138,7 @@ describe("ScriptingInterceptorInspectorService", () => {
       )
     })
 
-    it("should warn for pm.sendRequest with request object containing same-origin URL", () => {
+    it("should warn for fetch with a same-origin URL in the pre-request script", () => {
       const container = new TestContainer()
 
       container.bindMock(KernelInterceptorService, {
@@ -179,10 +152,7 @@ describe("ScriptingInterceptorInspectorService", () => {
       const req = ref({
         ...getDefaultRESTRequest(),
         preRequestScript: `
-          pm.sendRequest({
-            url: 'https://example.com/api/data',
-            method: 'GET'
-          }, (err, res) => {})
+          await fetch('${window.location.origin}/api/data', { method: 'GET' })
         `,
       })
 
@@ -319,7 +289,7 @@ describe("ScriptingInterceptorInspectorService", () => {
       )
     })
 
-    it("should detect pm.sendRequest() in test script", () => {
+    it("should detect hopp.fetch() in test script", () => {
       const container = new TestContainer()
 
       container.bindMock(KernelInterceptorService, {
@@ -331,7 +301,7 @@ describe("ScriptingInterceptorInspectorService", () => {
 
       const req = ref({
         ...getDefaultRESTRequest(),
-        testScript: "pm.sendRequest('/api', () => {})",
+        testScript: "await hopp.fetch('/api')",
       })
 
       const result = inspector.getInspections(req, ref(null))

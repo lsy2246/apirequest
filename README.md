@@ -10,10 +10,11 @@ A local API workbench for HTTP, GraphQL, WebSocket, API documentation, Mock serv
 
 ## Local web development
 
-Use Node.js 24 and the pnpm version pinned in `package.json`. Copy `.env.example` to `.env` and configure the local database before starting the backend. Single-user mode is for loopback access.
+Use Node.js 24 and the pnpm version pinned in `package.json`. Copy `.env.example` to `.env` and configure the local database before starting the backend. The workspace always uses a single user with automatic sign-in and defaults to loopback access. LAN test deployments can explicitly set `APIREQUEST_ALLOW_LAN_ACCESS=true` with matching private IPv4 hosts in the frontend and backend URLs. `APIREQUEST_WEB_ROOT` serves the built web client from the backend; `APIREQUEST_TLS_CERT` and `APIREQUEST_TLS_KEY` enable HTTPS on the same port.
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm ci:prepare
 pnpm --filter apirequest-backend run start:dev
 pnpm --filter @apirequest/selfhost-web run dev
 ```

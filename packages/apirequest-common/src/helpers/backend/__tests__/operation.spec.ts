@@ -4,7 +4,11 @@ import { expect, it, vi } from "vitest"
 import { initBackendGQLClient, runGQLQuery, runMutation } from "../GQLClient"
 import { backendOperation } from "../operation"
 
-const { send } = vi.hoisted(() => ({ send: vi.fn<typeof fetch>() }))
+const { send } = vi.hoisted(() => {
+  vi.stubEnv("VITE_BACKEND_GQL_URL", "https://backend.example.test/graphql")
+  vi.stubEnv("VITE_BACKEND_WS_URL", "wss://backend.example.test/graphql")
+  return { send: vi.fn<typeof fetch>() }
+})
 
 vi.mock("~/platform", () => ({
   platform: {
@@ -20,8 +24,10 @@ vi.mock("~/platform", () => ({
 }))
 
 it("loads the web documents and sends named backend operations", async () => {
-  const environments = { team: { teamEnvironments: [] } }
-  const updated = { updateRequest: { id: "request-id" } }
+  const environments = { me: { environments: [] } }
+  const updated = {
+    updateRESTUserRequest: { id: "request-id", collectionID: "collection-id", request: "{}" },
+  }
   const reply = (data: object) =>
     new Response(JSON.stringify({ data }), {
       headers: { "Content-Type": "application/json" },
@@ -32,12 +38,12 @@ it("loads the web documents and sends named backend operations", async () => {
   await initBackendGQLClient()
 
   const query = await runGQLQuery({
-    query: backendOperation("GetTeamEnvironmentsDocument"),
-    variables: { teamID: "team-id" },
+    query: backendOperation("GetUserEnvironmentsDocument"),
+    variables: {},
   })
   const mutation = await runMutation(
-    backendOperation("UpdateRequestDocument"),
-    { requestID: "request-id", data: { title: "renamed" } }
+    backendOperation("UpdateRestUserRequestDocument"),
+    { id: "request-id", title: "renamed", request: "{}" }
   )()
 
   expect(query).toEqual(E.right(environments))
@@ -46,11 +52,11 @@ it("loads the web documents and sends named backend operations", async () => {
     JSON.parse(String(init?.body))
   )
   expect(queryBody).toMatchObject({
-    query: expect.stringContaining("query GetTeamEnvironments"),
-    variables: { teamID: "team-id" },
+    query: expect.stringContaining("query GetUserEnvironments"),
+    variables: {},
   })
   expect(mutationBody).toMatchObject({
-    query: expect.stringContaining("mutation UpdateRequest"),
-    variables: { requestID: "request-id", data: { title: "renamed" } },
+    query: expect.stringContaining("mutation UpdateRESTUserRequest"),
+    variables: { id: "request-id", title: "renamed", request: "{}" },
   })
 })

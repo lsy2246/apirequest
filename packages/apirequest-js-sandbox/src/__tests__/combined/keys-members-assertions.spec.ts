@@ -379,7 +379,7 @@ describe.each(NAMESPACES)(
           ${namespace}.test('Contains and includes', function () {
             var arr = [1,2,3];
             ${namespace}.expect(arr).to.include(2);
-            ${namespace}.expect('apirequest').to.include('hopp');
+            ${namespace}.expect('apirequest').to.include('api');
             ${namespace}.expect({a: 1, b: 2}).to.have.keys(['a','b']);
             ${namespace}.expect({x:5}).to.not.have.key('z');
           });
@@ -404,7 +404,7 @@ describe.each(NAMESPACES)(
                 },
                 {
                   status: "pass",
-                  message: "Expected 'apirequest' to include 'hopp'",
+                  message: "Expected 'apirequest' to include 'api'",
                 },
                 {
                   status: "pass",

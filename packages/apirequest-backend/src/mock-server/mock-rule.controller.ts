@@ -44,7 +44,6 @@ export class MockRuleController {
   private owner(req: OwnerRequest) {
     const policy = getLocalWorkspaceConfig(this.config);
     if (
-      !policy ||
       req.user.uid !== LOCAL_WORKSPACE_UID ||
       req.get('x-workbench-local') !== '1'
     )

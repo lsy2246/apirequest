@@ -13,7 +13,6 @@ describe('本机身份会话', () => {
   const auth = mockDeep<AuthService>();
   const jwt = mockDeep<JwtService>();
   const config = new ConfigService({
-    HOPP_SINGLE_USER_MODE: 'true',
     VITE_BASE_URL: 'http://127.0.0.1:3000',
     VITE_BACKEND_GQL_URL: 'http://127.0.0.1:3170/graphql',
   });

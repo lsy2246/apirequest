@@ -10,36 +10,34 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        # Pinned to Node.js 22 due to known test failures on Node.js 24.
-        # Future TODO: Investigate test failures and move to Node.js 24 (Active LTS).
-        node-version: [22]
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://postgres:testpass@127.0.0.1:5432/apirequest
+      DATA_ENCRYPTION_KEY: "12345678901234567890123456789012"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup environment
-        run: mv .env.example .env
+        run: cp .env.example .env
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
 
       - name: Setup node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 10
-          run_install: false
+          node-version: 24
+          cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install
-        env:
-          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/apirequest
-          DATA_ENCRYPTION_KEY: "12345678901234567890123456789012"
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build workspace dependencies and generate GraphQL types
+        run: pnpm ci:prepare
 
       - name: Run tests
-        run: pnpm test
+        run: pnpm --workspace-concurrency=1 -r do-test --maxWorkers=2

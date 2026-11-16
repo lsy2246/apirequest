@@ -1,4 +1,7 @@
-import { assertLocalWorkspaceRequest, getLocalWorkspaceConfig } from './auth/local-workspace/policy';
+import {
+  assertLocalWorkspaceRequest,
+  getLocalWorkspaceConfig,
+} from './auth/local-workspace/policy';
 import { WorkbenchMcpModule } from './workbench-mcp/mcp.module';
 import { HttpException, Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
@@ -52,7 +55,7 @@ import { PublishedDocsModule } from './published-docs/published-docs.module';
               onConnect: (context: any) => {
                 const request = context.extra.request;
                 const local = getLocalWorkspaceConfig(configService);
-                if (local) assertLocalWorkspaceRequest(request, local);
+                assertLocalWorkspaceRequest(request, local);
                 const headers = { ...request.headers };
                 const cookies: Record<string, unknown> = headers.cookie
                   ? subscriptionContextCookieParser(headers.cookie)

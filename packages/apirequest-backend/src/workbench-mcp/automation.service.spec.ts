@@ -39,7 +39,6 @@ function fixture() {
     prisma as any,
     {} as any,
     {} as any,
-    {} as any,
   );
   return { service, prisma, tx };
 }

@@ -60,9 +60,6 @@ describe("EnvironmentsSpotlightSearcherService", () => {
     return container.bind(EnvironmentsSpotlightSearcherService)
   }
 
-  // A personal env stays selectable inside a team workspace, and the team
-  // editor resolves by NAME — branching on workspace instead of the selected
-  // env's scope silently edits a same-named team environment
   it("edits the personal environment when a personal env is selected", () => {
     envMock.selectedIndex$.next({ type: "MY_ENV", index: 0 })
     envMock.currentEnv$.next({ name: "shared-name", variables: [] })
@@ -76,21 +73,13 @@ describe("EnvironmentsSpotlightSearcherService", () => {
     )
   })
 
-  it("edits the team environment when a team env is selected", () => {
-    envMock.selectedIndex$.next({
-      type: "TEAM_ENV",
-      teamEnvID: "env-1",
-      teamID: "team-a",
-      environment: { name: "shared-name", variables: [] },
-    })
-    envMock.currentEnv$.next({ name: "shared-name", variables: [] })
+  it("does not open an editor when no environment is selected", () => {
+    envMock.selectedIndex$.next({ type: "NO_ENV_SELECTED" })
+    envMock.currentEnv$.next(null)
 
     const searcher = bindSearcher()
     searcher.onDocSelected("edit_selected_env")
 
-    expect(actionsMock.invokeAction).toHaveBeenCalledWith(
-      "modals.team.environment.edit",
-      { envName: "shared-name" }
-    )
+    expect(actionsMock.invokeAction).not.toHaveBeenCalled()
   })
 })

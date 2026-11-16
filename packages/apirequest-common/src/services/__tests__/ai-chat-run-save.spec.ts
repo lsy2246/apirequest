@@ -36,10 +36,8 @@ import { AIChatService } from "../ai-chat.service"
 import { platform } from "~/platform"
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
 import { WorkspaceService } from "~/services/workspace.service"
-import { TeamCollectionsService } from "~/services/team-collection.service"
 import { TestRunnerService } from "~/services/test-runner/test-runner.service"
 import { GQLQueryBuilderService } from "~/services/gql-query-builder.service"
-import { TeamAccessRole } from "~/services/workspace.service"
 import { defineActionHandler } from "~/helpers/actions"
 import { getDefaultRESTRequest } from "~/helpers/rest/default"
 import { getDefaultGQLRequest } from "@apirequest/data"
@@ -100,7 +98,6 @@ describe("AIChatService run/save mechanics", () => {
   let chat: AIChatService
   let tabs: WorkspaceTabsService
   let workspace: WorkspaceService
-  let teamCollections: TeamCollectionsService
   let runner: TestRunnerService
   let gqlBuilder: GQLQueryBuilderService
   let app: App | null
@@ -231,7 +228,6 @@ describe("AIChatService run/save mechanics", () => {
     chat = c.bind(AIChatService)
     tabs = c.bind(WorkspaceTabsService)
     workspace = c.bind(WorkspaceService)
-    teamCollections = c.bind(TeamCollectionsService)
     runner = c.bind(TestRunnerService)
     gqlBuilder = c.bind(GQLQueryBuilderService)
     app = null
@@ -543,70 +539,6 @@ describe("AIChatService run/save mechanics", () => {
       expect(opened).not.toBe(a.id)
       expect(method(opened)).toBe("DELETE")
       expect(method(a.id)).toBe("GET")
-    })
-
-    it("a stopped turn's late tab switch doesn't move the next turn's pin", async () => {
-      vi.spyOn(teamCollections, "changeTeamID").mockImplementation(() => {})
-      workspace.changeWorkspace({
-        type: "team",
-        teamID: "team_1",
-        teamName: "Acme",
-        role: TeamAccessRole.Owner,
-      })
-      const x = tabs.createNewTab(
-        restTab("https://x.example/other", "GET", {
-          saveContext: { originLocation: "team-collection", requestID: "r_x" },
-        })
-      )
-      const a = tabs.createNewTab(restTab("https://a.example/mine"))
-      tabs.setActiveTab(a.id)
-      await mount()
-      // A slow team lookup: open_request activates X only after it.
-      const lookup = deferred()
-      const find = vi
-        .spyOn(
-          chat as unknown as { findTeamRequestByName(): Promise<unknown> },
-          "findTeamRequestByName"
-        )
-        .mockImplementation(async () => {
-          await lookup.promise
-          const request = { ...getDefaultRESTRequest(), name: "X" }
-          return {
-            request: { id: "r_x", collectionID: "c", title: "X", request },
-            path: "c",
-            label: "C/X",
-          }
-        })
-
-      chatFn.mockResolvedValueOnce(
-        reply([{ id: "1", name: "open_request", input: { request: "X" } }])
-      )
-      const first = chat.sendMessage("open X", "")
-      await until(() => find.mock.calls.length)
-      chat.stop()
-
-      // Turn 2 on A; the stopped tool finishes while run_request waits.
-      respond = false
-      chatFn
-        .mockResolvedValueOnce(
-          reply([
-            { id: "2", name: "run_request", input: {} },
-            { id: "3", name: "set_method", input: { method: "DELETE" } },
-          ])
-        )
-        .mockResolvedValueOnce(reply([], "done"))
-      const second = chat.sendMessage("run it, then make it a DELETE", "")
-      await until(() => sent.length)
-      lookup.resolve(null)
-      await first
-      expect(tabs.currentActiveTab.value.id).toBe(x.id)
-      const doc = tabs.getTabRef(a.id).value.document
-      if (doc.type === "request") doc.response = ok200
-      await second
-
-      expect(sent).toEqual([a.id])
-      expect(method(a.id)).toBe("DELETE")
-      expect(method(x.id)).toBe("GET")
     })
   })
 
@@ -1301,27 +1233,6 @@ describe("AIChatService run/save mechanics", () => {
         })
       )
 
-    it("refuses a team save for a viewer", async () => {
-      // No backend here: skip the team tree load the switch triggers.
-      vi.spyOn(teamCollections, "changeTeamID").mockImplementation(() => {})
-      workspace.changeWorkspace({
-        type: "team",
-        teamID: "team_1",
-        teamName: "Acme",
-        role: TeamAccessRole.Viewer,
-      })
-      tabs.setActiveTab(boundTab("team-collection").id)
-      await mount()
-
-      const { replies, toolResults } = await run([
-        { id: "1", name: "save_request", input: {} },
-      ])
-
-      expect(saved).toEqual([])
-      expect(replies[0]).toMatch(/view-only/)
-      expect(toolResults[0].is_error).toBe(true)
-    })
-
     it("reports a save that never completes", async () => {
       vi.useFakeTimers()
       onSave = () => {} // e.g. an expired session: the handler returns early
@@ -1445,44 +1356,6 @@ describe("AIChatService run/save mechanics", () => {
       expect(replies[1]).toMatch(/Didn't save the new host/)
       expect(toolResults[1].is_error).toBe(true)
     })
-
-    // Team tabs outlive a switch to Personal.
-    it("names the team a bound tab saves to, not the current workspace", async () => {
-      workspace
-        .acquireTeamListAdapter(null)
-        .teamList$.next([
-          { id: "team_1", name: "Acme", myRole: TeamAccessRole.Owner },
-        ] as never)
-      tabs.setActiveTab(
-        tabs.createNewTab(
-          restTab("https://a.example", "GET", {
-            isDirty: true,
-            saveContext: {
-              originLocation: "team-collection",
-              requestID: "req_1",
-              teamID: "team_1",
-            },
-          })
-        ).id
-      )
-      await mount()
-      inner(chat).syncTurnTab()
-
-      const pending = run([
-        { id: "1", name: "set_url", input: { url: "https://x.example/c" } },
-        { id: "2", name: "save_request", input: {} },
-      ])
-      await untilPrompt()
-      expect(workspace.currentWorkspace.value.type).toBe("personal")
-      expect(chat.pendingConfirmation.value).toMatchObject({
-        kind: "save",
-        workspace: "Acme",
-      })
-      chat.resolveConfirmation(false)
-      await pending
-
-      expect(saved).toEqual([])
-    })
   })
 
   describe("save_request_to_collection", () => {
@@ -1565,78 +1438,6 @@ describe("AIChatService run/save mechanics", () => {
       expect(saved).toEqual([a.id])
       expect(ran.replies[0]).toBe(OK_LINE)
       expect(kept.replies[0]).toBe("💾 Saved the request.")
-    })
-  })
-
-  describe("switch_workspace", () => {
-    const teams = [{ id: "team_1", name: "Acme", myRole: TeamAccessRole.Owner }]
-
-    beforeEach(() => {
-      // No backend here: skip the tree load the switch triggers.
-      vi.spyOn(teamCollections, "changeTeamID").mockImplementation(() => {})
-    })
-
-    it("re-pins when the model picks the workspace the user moved to", async () => {
-      vi.spyOn(
-        chat as unknown as { loadTeams(): Promise<unknown> },
-        "loadTeams"
-      ).mockResolvedValue(teams)
-      tabs.setActiveTab(tabs.createNewTab(restTab("https://a.example")).id)
-      await mount()
-      const round = deferred()
-      chatFn
-        .mockReturnValueOnce(round.promise)
-        .mockResolvedValueOnce(reply([], "done"))
-      const turn = chat.sendMessage("switch to Acme and clear the env", "")
-      await Promise.resolve()
-      // The user clicks Acme too while the model thinks.
-      workspace.changeWorkspace({
-        type: "team",
-        teamID: "team_1",
-        teamName: "Acme",
-        role: TeamAccessRole.Owner,
-      })
-      round.resolve(
-        reply([
-          { id: "1", name: "switch_workspace", input: { workspace: "Acme" } },
-          { id: "2", name: "select_environment", input: { name: "none" } },
-        ])
-      )
-      await turn
-
-      const messages = chatFn.mock.calls[1][0] as {
-        content: { content: string; is_error?: boolean }[]
-      }[]
-      const results = messages[messages.length - 1].content
-      expect(results[0].is_error).toBeFalsy()
-      expect(results[1].content).not.toMatch(/workspace changed/)
-      expect(results[1].is_error).toBeFalsy()
-    })
-
-    it("doesn't switch for a turn stopped while the teams load", async () => {
-      const loaded = deferred()
-      const loadTeams = vi
-        .spyOn(
-          chat as unknown as { loadTeams(): Promise<unknown> },
-          "loadTeams"
-        )
-        .mockReturnValue(loaded.promise)
-      tabs.setActiveTab(tabs.createNewTab(restTab("https://a.example")).id)
-      await mount()
-      chatFn.mockResolvedValueOnce(
-        reply([
-          { id: "1", name: "switch_workspace", input: { workspace: "Acme" } },
-        ])
-      )
-
-      const turn = chat.sendMessage("switch to Acme", "")
-      await until(() => loadTeams.mock.calls.length)
-      chat.stop()
-      loaded.resolve(teams)
-      await turn
-      await tick()
-
-      expect(workspace.currentWorkspace.value.type).toBe("personal")
     })
   })
 

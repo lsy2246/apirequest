@@ -1,12 +1,17 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { CronTime } from 'cron';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import * as E from 'fp-ts/Either';
-import { getLocalWorkspaceConfig, LOCAL_WORKSPACE_UID } from 'src/auth/local-workspace/policy';
+import { LOCAL_WORKSPACE_UID } from 'src/auth/local-workspace/policy';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CollectionFolder } from 'src/types/CollectionFolder';
 import { UserCollectionService } from 'src/user-collection/user-collection.service';
@@ -144,7 +149,6 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly domain: McpDomainService,
     private readonly collections: UserCollectionService,
-    private readonly config: ConfigService,
   ) {}
 
   async schedules(ownerUid: string) {
@@ -335,8 +339,7 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
 
   @Interval(5000)
   async tick() {
-    if (this.scanning || this.closing || !getLocalWorkspaceConfig(this.config))
-      return;
+    if (this.scanning || this.closing) return;
     this.scanning = true;
     try {
       const ownerUid = LOCAL_WORKSPACE_UID;

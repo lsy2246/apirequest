@@ -1,8 +1,23 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Param,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { assertLocalWorkspaceRequest, getLocalWorkspaceConfig, LOCAL_WORKSPACE_UID } from 'src/auth/local-workspace/policy';
+import {
+  assertLocalWorkspaceRequest,
+  getLocalWorkspaceConfig,
+  LOCAL_WORKSPACE_UID,
+} from 'src/auth/local-workspace/policy';
 import { AuthUser } from 'src/types/AuthUser';
 import { ThrottlerBehindProxyGuard } from 'src/guards/throttler-behind-proxy.guard';
 import { WorkbenchMcpService } from './mcp.service';
@@ -25,10 +40,6 @@ export class WorkbenchMcpController {
   ) {}
   private local(req: Request) {
     const policy = getLocalWorkspaceConfig(this.config);
-    if (!policy)
-      throw new ForbiddenException(
-        'MCP is only available in local single-user mode',
-      );
     assertLocalWorkspaceRequest(req, policy);
   }
   private owner(req: OwnerRequest) {
