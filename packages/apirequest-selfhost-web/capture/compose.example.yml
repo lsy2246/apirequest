@@ -1,0 +1,23 @@
+# 与现有工作台部署组合；管理接口经同源 HTTPS 反向代理，只管理服务所在机器的抓包。
+services:
+  capture:
+    build:
+      context: ../../..
+      dockerfile: packages/apirequest-selfhost-web/capture/Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      APIREQUEST_CAPTURE_ORIGIN: https://workbench.example.com
+      APIREQUEST_CAPTURE_OWNER_SECRET_FILE: /run/secrets/capture_owner
+      APIREQUEST_CAPTURE_CONTROL_BIND: 0.0.0.0
+    ports:
+      - '127.0.0.1:3190:3190'
+    volumes:
+      - capture-data:/data
+    secrets:
+      - capture_owner
+secrets:
+  capture_owner:
+    file: ./capture-owner.secret
+volumes:
+  capture-data:

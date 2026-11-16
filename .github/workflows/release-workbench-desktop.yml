@@ -1,0 +1,138 @@
+name: Release apirequest Desktop
+
+on:
+  push:
+    branches: [main]
+    paths: [desktop/package.json]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changed: ${{ steps.version.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: version
+        env:
+          BASE_SHA: ${{ github.event.before }}
+        run: node desktop/release-version.cjs
+
+  build:
+    needs: version
+    if: needs.version.outputs.changed == 'true'
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            runner: windows-2025
+            bundle: nsis
+            executable: desktop/src-tauri/target/debug/apirequest-native.exe
+            installer: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          - platform: macos-arm64
+            runner: macos-15
+            bundle: dmg
+            executable: desktop/src-tauri/target/debug/apirequest-native
+            installer: desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          - platform: macos-x64
+            runner: macos-15-intel
+            bundle: dmg
+            executable: desktop/src-tauri/target/debug/apirequest-native
+            installer: desktop/src-tauri/target/release/bundle/dmg/*.dmg
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up Rust
+        run: rustup default stable
+      - name: Install workbench dependencies
+        run: pnpm --filter '@apirequest/selfhost-web...' install --frozen-lockfile --ignore-scripts
+      - name: Prepare capture engine
+        run: python desktop/prepare-capture.py
+      - name: Build native frontend
+        run: pnpm --dir desktop run prepare:native
+      - name: Run targeted workbench tests
+        run: |
+          cargo test --locked --manifest-path desktop/workbench-core/Cargo.toml
+          cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml capture::tests::captures_real_http_through_packaged_engine
+          pnpm --filter '@apirequest/common' exec vitest run src/helpers/curl/__tests__/curlparser.spec.js src/helpers/local-workspace/__tests__/collections.spec.ts src/services/persistence/__tests__/index.spec.ts src/helpers/load-test/__tests__/runner.spec.ts
+      - name: Check native startup and persisted data
+        env:
+          NATIVE_EXECUTABLE: ${{ matrix.executable }}
+        shell: bash
+        run: |
+          node --check desktop/src-tauri/tests/smoke.js
+          node --check desktop/src-tauri/tests/mock-smoke.js
+          cargo build --locked --manifest-path desktop/src-tauri/Cargo.toml
+          python desktop/src-tauri/tests/smoke.py "$NATIVE_EXECUTABLE" --capture-only
+          python desktop/src-tauri/tests/smoke.py "$NATIVE_EXECUTABLE"
+      - name: Package installer
+        working-directory: desktop
+        env:
+          NATIVE_BUNDLE: ${{ matrix.bundle }}
+        shell: bash
+        run: npm exec --yes --package=@tauri-apps/cli@2.11.3 -- tauri build --ci --bundles "$NATIVE_BUNDLE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: ${{ matrix.installer }}
+          if-no-files-found: error
+
+  publish:
+    needs: [version, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: workbench-desktop-v${{ needs.version.outputs.version }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: installers
+      - name: Publish verified installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+        shell: bash
+        run: |
+          tag="v${VERSION}"
+          files=(installers/*)
+          [[ "${#files[@]}" -eq 3 ]] || { echo 'Expected three installers'; exit 1; }
+          existing_commit=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null || true)
+          if [[ -n "$existing_commit" && "$existing_commit" != "$GITHUB_SHA" ]]; then
+            echo 'Version tag already points to a different commit'
+            exit 1
+          fi
+          if gh release view "$tag" --json isDraft,targetCommitish > release.json 2>/dev/null; then
+            [[ $(jq -r .targetCommitish release.json) == "$GITHUB_SHA" ]] || exit 1
+            [[ $(jq -r .isDraft release.json) == true ]] || exit 0
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "apirequest $VERSION" --generate-notes --draft
+          fi
+          gh release upload "$tag" "${files[@]}" --clobber
+          gh release edit "$tag" --draft=false

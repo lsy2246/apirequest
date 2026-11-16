@@ -1,0 +1,10 @@
+{
+  "name": "apirequest-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local API workbench",
+  "author": "API Request contributors",
+  "scripts": {
+    "prepare:native": "node prepare-runtime.cjs"
+  }
+}

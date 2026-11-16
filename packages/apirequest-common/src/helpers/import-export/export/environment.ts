@@ -1,0 +1,60 @@
+import { Environment } from "@apirequest/data";
+import * as E from "fp-ts/Either";
+import { cloneDeep } from "lodash-es";
+
+import { stripClientLocalValuesForWire } from "~/helpers/clientLocalVariables";
+import { initializeDownloadFile } from ".";
+
+const getEnvironmentJSON = (
+  environmentObj: Environment,
+  environmentIndex?: number | "Global" | null
+) => {
+  const newEnvironment = cloneDeep(environmentObj)
+
+  const environmentId =
+    environmentIndex || environmentIndex === 0
+      ? environmentIndex
+      : environmentObj.id
+
+  // Eliminate `currentValue` field from environment variables prior to export
+  const transformedEnvironment = transformEnvironmentVariables(newEnvironment)
+
+  return environmentId !== null
+    ? JSON.stringify(transformedEnvironment, null, 2)
+    : undefined
+}
+
+// Apply necessary transformations prior to environment exports.
+// Strips `initialValue` for `secret: true` variables AND clears
+// `currentValue` for all variables.
+export const transformEnvironmentVariables = ({
+  id,
+  v,
+  name,
+  variables,
+}: Environment) => {
+  return {
+    id,
+    v,
+    name,
+    variables: stripClientLocalValuesForWire(variables),
+  }
+}
+
+export const exportAsJSON = async (
+  environmentObj: Environment,
+  environmentIndex?: number | "Global" | null
+): Promise<E.Right<string> | E.Left<string>> => {
+  const environmentJSON = getEnvironmentJSON(environmentObj, environmentIndex)
+
+  if (!environmentJSON) {
+    return E.left("state.download_failed")
+  }
+
+  const message = await initializeDownloadFile(
+    environmentJSON,
+    JSON.parse(environmentJSON).name
+  )
+
+  return message
+}

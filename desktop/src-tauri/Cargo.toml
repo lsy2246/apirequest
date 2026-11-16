@@ -1,0 +1,49 @@
+[package]
+name = "apirequest-native"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+base64 = "0.22"
+regex = "1"
+rquickjs = "0.14"
+jsonschema = { version = "0.61", default-features = false }
+jsonpath-rust = "1.0"
+sxd-document = "0.3"
+sxd-xpath = "0.4"
+flate2 = "1"
+brotli = "9"
+futures-util = { version = "0.3", features = ["sink"] }
+tokio-tungstenite = "0.30"
+reqwest = { version = "0.13.5", features = ["json", "stream"] }
+apirequest-workbench = { path = "../workbench-core" }
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+time = { version = "0.3", features = ["formatting", "parsing"] }
+tokio = { version = "1", features = ["net", "time", "sync", "rt"] }
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tauri = { version = "2.11.3", features = ["devtools", "protocol-asset"] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-relay = { git = "https://github.com/CuriousCorrelation/tauri-plugin-relay", rev = "1461c7b87b66a19bd65805e286bbec3426b3b8ff" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+strip = true

@@ -1,0 +1,204 @@
+{
+  "date": "2026-11-05",
+  "scope": "Apipost 风格的单人 API 工作台；HTTP、GraphQL、WebSocket、文档、Mock、自动化与有界 HTTP 压测",
+  "automated": {
+    "status": "passed",
+    "files": 11,
+    "tests": 211,
+    "entry": "packages/apirequest-common: vitest run src/helpers/load-test/__tests__/runner.spec.ts src/helpers/import-export/export/__tests__/openapi.spec.ts src/helpers/import-export/import/__tests__/postmanEnv.spec.ts src/services/__tests__/workspace.service.spec.ts src/helpers/curl/__tests__ src/services/test-runner/__tests__ src/services/tab/__tests__/workspace-tabs.service.spec.ts",
+    "additionalEntries": [
+      "src/helpers/local-workspace/__tests__",
+      "src/helpers/__tests__/clientLocalVariables.spec.ts"
+    ]
+  },
+  "build": {
+    "web": "passed",
+    "kernel": "passed",
+    "entry": "packages/apirequest-selfhost-web: vite build；packages/apirequest-kernel: vite build && tsc --project tsconfig.decl.json",
+    "admin": "passed",
+    "backend": "passed"
+  },
+  "localization": {
+    "commonKeys": 2368,
+    "adminKeys": 466,
+    "keyParity": "passed",
+    "interpolationParity": "passed",
+    "missingLiteralKeys": 0,
+    "syntaxCheckedFiles": 136
+  },
+  "browser": {
+    "curlImportAndSave": "passed",
+    "collectionDescriptionSave": "passed",
+    "httpRequest": "200",
+    "automation": {
+      "iterations": 2,
+      "passedAssertions": 2,
+      "failedAssertions": 0,
+      "persistedSummary": "passed"
+    },
+    "graphql": "Schema 连接与查询返回 200",
+    "websocket": "连接、发送、回显与断开均通过",
+    "load": {
+      "concurrency": 4,
+      "requests": 20,
+      "successful": 20,
+      "serverObservedMaximumConcurrency": 4,
+      "remainingRequests": 0,
+      "persistedReport": "passed"
+    },
+    "publishedDocument": "公开页面可读取已发布示例",
+    "noLogin": {
+      "automaticLocalWorkspace": "passed",
+      "mockCreate": "passed",
+      "adoptPreexistingDeviceCollections": "passed",
+      "documentPublish": "passed"
+    },
+    "simplifiedNavigation": {
+      "headerRemoved": "passed",
+      "restSidebarToolTabsRemoved": "passed",
+      "workspaceBreadcrumbRemoved": "passed",
+      "collectionImportIconRemoved": "passed",
+      "newHttpRequest": "passed",
+      "newGraphqlRequest": "passed",
+      "newCollectionDialog": "passed",
+      "savePickerFolderOnly": "passed",
+      "curlImportFromNewMenu": "passed",
+      "importedPostRequestStatus": 200,
+      "graphqlSchemaAndDocs": "retained"
+    },
+    "headerEditing": {
+      "status": "passed",
+      "explicitAuthorizationEditable": "passed",
+      "explicitContentTypeEditable": "passed",
+      "descriptionEditable": "passed",
+      "actualServerAuthorizationEdited": true,
+      "actualServerContentTypeEdited": true,
+      "actualAuthorizationHeaderCount": 1,
+      "generatedBodyHeaderSourceEditor": "passed",
+      "stickyOffsetsAndColumnAlignment": "passed",
+      "probeProcess": {
+        "name": "apirequest-header-check",
+        "pid": 29207,
+        "port": 3190,
+        "cleanup": "SIGTERM 后退出码 0，监听端口已释放"
+      }
+    }
+  },
+  "backend": {
+    "database": "PostgreSQL 18",
+    "mailLogin": "passed（本地邮件捕获，无外发）",
+    "mockCreateAndCall": "passed",
+    "documentPublishAndRead": "passed",
+    "schemaChanges": "none",
+    "localSessionTests": {
+      "files": 2,
+      "passed": 17
+    },
+    "localSessionIntegration": {
+      "freshSessionWithoutEmail": "passed",
+      "fixedOwnerAcrossClients": "passed",
+      "cookieAttributes": "HttpOnly、SameSite=Lax、无 Domain",
+      "parallelAdoptionNoDuplicates": "passed",
+      "rejectedInvalidRequests": 5,
+      "malformedCollectionsJSON": "passed（HTTP 400）"
+    }
+  },
+  "limitations": [
+    "浏览器压测受跨域和浏览器连接数限制，适用于本机轻量压测。",
+    "压测执行确认时的请求、鉴权、头与变量快照，不执行前后脚本；报告仅在当前设备保存最近 20 份。",
+    "完整类型检查未通过：原 vue-tsc 1.8.8 与 TypeScript 5.9 不兼容；替代检查发现既有声明及页面类型错误。构建、语法检查和定向测试不等同于完整类型检查。",
+    "删除团队前端管理页面、团队搜索入口和多格式接口导入实现；后端共享的团队归属模型、鉴权及历史数据库结构保留兼容。",
+    "本地版通过 HOPP_SINGLE_USER_MODE 自动建立同一份真实会话，仅允许配置的本机来源及回环连接；账户模式保留兼容，关闭该配置后恢复原账户流程。"
+  ],
+  "previewResources": {
+    "web": 3000,
+    "backend": 3170,
+    "fixture": 3188,
+    "postgres": "apirequest-product-preview-postgres-20261105:15445",
+    "mailpit": "apirequest-product-preview-mailpit-20261105:8026 / 1026",
+    "postgresVolume": "apirequest-product-preview-postgres-data",
+    "status": "按用户要求保持预览运行；单人模式已启用，无需交互登录。停止预览时只关闭这些专用资源，不删除数据库卷。",
+    "backendBinding": "127.0.0.1:3170"
+  },
+  "git": "未提交，未推送",
+  "securityReferences": [
+    "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html",
+    "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html",
+    "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html"
+  ],
+  "headerRegression": {
+    "entry": "src/helpers/curl/__tests__ src/helpers/utils/__tests__/{variablePrecedence,effectiveURLGQLAuth,effectiveURLHeaderOverrides}.spec.ts",
+    "tests": 75,
+    "files": 5,
+    "status": "passed",
+    "webBuild": "passed",
+    "checks": "ESLint 无错误；Vue/TS 语法与翻译键检查通过",
+    "scope": "显式头大小写优先级、禁用后的自动头恢复、继承认证、cURL Content-Type 和 multipart boundary 保留策略"
+  },
+  "mcp": {
+    "date": "2026-11-06",
+    "status": "passed",
+    "transport": "MCP stdio 2025-11-25",
+    "domains": [
+      "collection",
+      "request (REST/GQL)",
+      "environment",
+      "documentation",
+      "mock",
+      "automation",
+      "load_test",
+      "websocket"
+    ],
+    "stdioUnitTests": 4,
+    "backendTests": 197,
+    "integrationAssertions": 87,
+    "entries": [
+      "node --test scripts/workbench-mcp.test.mjs",
+      "apirequest-backend: jest --runInBand --coverage=false src/workbench-mcp/contract.spec.ts src/mock-server/mock-server.service.spec.ts src/published-docs/published-docs.service.spec.ts",
+      "MCP_TEST_BACKEND=http://localhost:3171 node scripts/workbench-mcp.integration.mjs"
+    ],
+    "build": {
+      "web": "passed",
+      "backend": "passed"
+    },
+    "postgresql": {
+      "version": "18.6",
+      "isolatedDatabase": "apirequest_mcp_20261105",
+      "freshMigrationDeploy": "passed twice",
+      "previewUpgrade": "只新增 WorkbenchConfig，二次检查为无变更",
+      "existingCollectionCount": 5,
+      "existingRequestCount": 15
+    },
+    "browser": {
+      "proposalReview": "passed",
+      "approveCreateAndUpdate": "passed",
+      "loadPlanIntoRunner": "passed: concurrency 3, requests 20",
+      "updateAfterApproval": "passed: concurrency 4",
+      "noAutoRun": "passed",
+      "mainPreviewAccess": "disabled by default"
+    },
+    "cleanup": {
+      "temporaryWeb": {
+        "pid": 45208,
+        "port": 3001,
+        "childPid": 45229,
+        "state": "stopped"
+      },
+      "temporaryBackend": {
+        "pid": 45314,
+        "port": 3171,
+        "state": "stopped"
+      },
+      "stdioChildren": "terminated by test harness",
+      "testToken": "revoked",
+      "testData": "retained",
+      "preview": "retained on 3000 / 3170"
+    },
+    "limitations": [
+      "未写入 Codex 或其他 AI 客户端设置；由用户启用并复制配置",
+      "不执行真实上游请求、自动化或压测",
+      "本次仅验证本机 stdio 和 PostgreSQL",
+      "历史迁移在已有数据库的独立 schema 下无法解析 public 的 pg_trgm；改用独立数据库后完整迁移两次通过"
+    ]
+  }
+}

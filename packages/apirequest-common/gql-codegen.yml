@@ -1,0 +1,22 @@
+overwrite: true
+schema: "../../gql-gen/*.gql"
+generates:
+  src/helpers/backend/graphql.ts:
+    documents: "src/**/*.graphql"
+    config:
+      enumValues:
+        ReqType: "./enums#ReqType"
+        SortOptions: "./enums#SortOptions"
+        WorkspaceType: "./enums#WorkspaceType"
+    plugins:
+      - add:
+          content: >
+            /* eslint-disable */
+            // Auto-generated file (DO NOT EDIT!!!), refer gql-codegen.yml
+      - typescript
+      - typescript-operations
+      - typed-document-node
+
+  src/helpers/backend/backend-schema.json:
+    plugins:
+      - urql-introspection

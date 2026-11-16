@@ -1,0 +1,25 @@
+import { defineVersion, entityReference } from "verzod"
+import { z } from "zod"
+
+import { HoppCollection } from ".."
+import { v11_baseCollectionSchema, V11_SCHEMA } from "./11"
+
+export const v12_baseCollectionSchema = v11_baseCollectionSchema.extend({
+  v: z.literal(12),
+  preRequestScript: z.string().catch(""),
+  testScript: z.string().catch(""),
+})
+
+type Input = z.input<typeof v12_baseCollectionSchema> & {
+  folders: Input[]
+}
+
+type Output = z.output<typeof v12_baseCollectionSchema> & {
+  folders: Output[]
+}
+
+export const V12_SCHEMA = v12_baseCollectionSchema.extend({
+  folders: z.lazy(() => z.array(V12_SCHEMA)),
+}) as z.ZodType<Output, z.ZodTypeDef, Input>
+
+export default defineVersion({ initial: true, schema: V12_SCHEMA })

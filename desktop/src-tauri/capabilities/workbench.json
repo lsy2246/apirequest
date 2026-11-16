@@ -1,0 +1,15 @@
+{
+  "identifier": "workbench",
+  "description": "Local workbench window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-set-webview-zoom",
+    "dialog:allow-save",
+    "dialog:allow-open",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "shell:allow-open",
+    "relay:default"
+  ]
+}
