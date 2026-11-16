@@ -85,6 +85,13 @@ jobs:
         working-directory: desktop
         # Windows needs its native Perl; Git Bash selects an incomplete MSYS Perl.
         run: npm exec --yes --package=@tauri-apps/cli@2.11.3 -- tauri build --ci --bundles ${{ matrix.bundle }}
+      - name: Verify the signed app inside the macOS installer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          installers=(desktop/src-tauri/target/release/bundle/dmg/*.dmg)
+          [[ "${#installers[@]}" -eq 1 ]] || { echo 'Expected one macOS installer'; exit 1; }
+          python desktop/verify-macos-installer.py "${installers[0]}"
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.platform }}
