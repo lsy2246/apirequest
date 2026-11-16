@@ -28,7 +28,7 @@ def verify(image):
             if Path(executable).name != executable:
                 raise ValueError("Invalid application executable path")
             subprocess.run([
-                "lipo", "-verify_arch", "arm64", str(app / "Contents/MacOS" / executable),
+                "lipo", str(app / "Contents/MacOS" / executable), "-verify_arch", "arm64",
             ], check=True)
             print(f"Verified signed Mac ARM64 installer: {image.name}", flush=True)
         finally:
