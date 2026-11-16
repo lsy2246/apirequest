@@ -21,7 +21,6 @@
         {{ t("request_case.encoding_hint") }}
       </p>
     </div>
-    <HistoryResultSettings v-if="supportsHistoryResults" toggle-only />
     <section
       v-for="[id, settings] in kernelInterceptorsWithSettings"
       :key="id"
@@ -38,14 +37,8 @@ import type { HoppRESTRequest } from "@apirequest/data"
 import { useI18n } from "~/composables/i18n"
 import { useSetting } from "~/composables/settings"
 import WorkbenchToggle from "./Toggle.vue"
-import HistoryResultSettings from "~/components/history/ResultSettings.vue"
-import { platform } from "~/platform"
 import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
 const request = defineModel<HoppRESTRequest>({ required: true })
-const supportsHistoryResults = computed(
-  () =>
-    platform.localDesktop || platform.auth.localSessionState?.value === "ready"
-)
 const kernelInterceptorService = useService(KernelInterceptorService)
 const kernelInterceptorsWithSettings = computed(() =>
   kernelInterceptorService.available.value.flatMap((interceptor) =>

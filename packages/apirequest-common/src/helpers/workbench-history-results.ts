@@ -1,6 +1,10 @@
-import type { RelayResponse } from "@apirequest/kernel";
-import { platform } from "~/platform";
-import { archiveNativeHistory, nativeHistoryAPI, nativeHistoryURL } from "./native-workbench-history";
+import type { RelayResponse } from "@apirequest/kernel"
+import { platform } from "~/platform"
+import {
+  archiveNativeHistory,
+  nativeHistoryAPI,
+  nativeHistoryURL,
+} from "./native-workbench-history"
 
 export type HistoryResultKind = "json" | "text" | "image" | "video" | "file"
 export type HistoryCleanupReport = { count: number; bytes: string }
@@ -118,7 +122,22 @@ export async function historyResultAPI<T>(path: string, options?: RequestInit) {
   return (await response.json()) as T
 }
 
-let pendingPolicy: Promise<HistoryResultPolicy> | undefined
+let pendingStorage: Promise<void> | undefined
+
+// Older installations may have disabled response storage separately. Recording
+// now always includes the response; enable storage before admitting new saves.
+export function ensureFullHistoryStorage(): Promise<void> {
+  pendingStorage ??= historyResultAPI("policy", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: true }),
+  })
+    .then(() => undefined)
+    .finally(() => {
+      pendingStorage = undefined
+    })
+  return pendingStorage
+}
 export const pendingHistoryResults = new Map<string, Promise<void>>()
 
 export function uploadHistoryResult(
@@ -137,16 +156,11 @@ async function persistHistoryResult(
   snapshot: HistoryResultSnapshot
 ) {
   try {
+    await ensureFullHistoryStorage()
     if (import.meta.env.VITE_WORKBENCH_NATIVE || window.__APIREQUEST_NATIVE__) {
       await archiveNativeHistory(historyId, snapshot)
       return
     }
-    pendingPolicy ??= historyResultAPI<HistoryResultPolicy>("policy").finally(
-      () => {
-        pendingPolicy = undefined
-      }
-    )
-    if (!(await pendingPolicy).enabled) return
     const { body, ...metadata } = snapshot
     const contentType =
       metadata.headers.find(({ key }) => key.toLowerCase() === "content-type")

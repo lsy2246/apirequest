@@ -159,25 +159,27 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@composables/i18n";
-import { useService } from "dioc/vue";
-import { CookieJarService } from "~/services/cookie-jar.service";
-import { Cookie } from "@apirequest/data";
-import IconTrash from "~icons/lucide/trash";
-import IconEdit from "~icons/lucide/edit";
-import IconTrash2 from "~icons/lucide/trash-2";
-import IconPlus from "~icons/lucide/plus";
-import IconCopy from "~icons/lucide/copy";
-import { cloneDeep, isEqual } from "lodash-es";
-import { ref, watch, computed } from "vue";
-import { EditCookieConfig } from "./EditCookie.vue";
-import { useColorMode } from "@composables/theming";
-import { useToast } from "@composables/toast";
-import { KernelInterceptorService } from "~/services/kernel-interceptor.service";
+import { useClipboard } from "~/composables/clipboard"
+import { useI18n } from "@composables/i18n"
+import { useService } from "dioc/vue"
+import { CookieJarService } from "~/services/cookie-jar.service"
+import { Cookie } from "@apirequest/data"
+import IconTrash from "~icons/lucide/trash"
+import IconEdit from "~icons/lucide/edit"
+import IconTrash2 from "~icons/lucide/trash-2"
+import IconPlus from "~icons/lucide/plus"
+import IconCopy from "~icons/lucide/copy"
+import { cloneDeep, isEqual } from "lodash-es"
+import { ref, watch, computed } from "vue"
+import { EditCookieConfig } from "./EditCookie.vue"
+import { useColorMode } from "@composables/theming"
+import { useToast } from "@composables/toast"
+import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ (e: "hide-modal"): void }>()
 
+const { copy: copyText } = useClipboard()
 const t = useI18n()
 const colorMode = useColorMode()
 const toast = useToast()
@@ -411,8 +413,7 @@ function makeUICookie(domain: string, value: string, name: string): Cookie {
 }
 
 function copyCookie(cookie: Cookie) {
-  navigator.clipboard.writeText(`${cookie.name}=${cookie.value}`)
-  toast.success(t("state.copied"))
+  void copyText(`${cookie.name}=${cookie.value}`)
 }
 
 const hideModal = () => {

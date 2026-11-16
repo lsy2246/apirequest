@@ -274,35 +274,52 @@
 </template>
 
 <script lang="ts" setup>
-import { WorkspaceType } from "~/helpers/backend/enums";
-import { getWebBackend } from "~/platform/web-backend";
-import { invoke } from "@tauri-apps/api/core";
-import { workbenchMcpAPI } from "~/helpers/workbench-mcp";
-import { ref, computed, watch, nextTick, onUnmounted, markRaw } from "vue";
-import { useI18n } from "~/composables/i18n";
-import { useToast } from "~/composables/toast";
-import { useDocumentationWorker } from "~/composables/useDocumentationWorker";
-import { useService } from "dioc/vue";
-import { HoppCollection, HoppGQLRequest, HoppRESTRequest } from "@apirequest/data";
-import { editRESTCollection, editRESTFolder, editRESTRequest } from "~/newstore/collections";
+import { useClipboard } from "~/composables/clipboard"
+import { WorkspaceType } from "~/helpers/backend/enums"
+import { getWebBackend } from "~/platform/web-backend"
+import { workbenchMcpAPI } from "~/helpers/workbench-mcp"
+import { ref, computed, watch, nextTick, onUnmounted, markRaw } from "vue"
+import { useI18n } from "~/composables/i18n"
+import { useToast } from "~/composables/toast"
+import { useDocumentationWorker } from "~/composables/useDocumentationWorker"
+import { useService } from "dioc/vue"
+import {
+  HoppCollection,
+  HoppGQLRequest,
+  HoppRESTRequest,
+} from "@apirequest/data"
+import {
+  editRESTCollection,
+  editRESTFolder,
+  editRESTRequest,
+} from "~/newstore/collections"
 
-import { HoppTabSaveContext } from "~/helpers/tab/document";
-import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
-import { DocumentationService, isLiveVersion, type DocumentationItem, type PublishedDocInfo } from "~/services/documentation.service";
-import IconFileText from "~icons/lucide/file-text";
-import IconLoader2 from "~icons/lucide/loader-2";
-import IconShare2 from "~icons/lucide/share-2";
-import IconPenLine from "~icons/lucide/pen-line";
-import IconCheveronDown from "~icons/lucide/chevron-down";
-import IconCopy from "~icons/lucide/copy";
-import IconCheck from "~icons/lucide/check";
-import IconPlus from "~icons/lucide/plus";
-import IconEye from "~icons/lucide/eye";
-import type { CreatePublishedDocsArgs, UpdatePublishedDocsArgs } from "~/helpers/backend/graphql";
-import { platform } from "~/platform";
-import * as TE from "fp-ts/TaskEither";
-import { pipe } from "fp-ts/function";
-import { refAutoReset, useClipboard } from "@vueuse/core";
+import { HoppTabSaveContext } from "~/helpers/tab/document"
+import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
+import {
+  DocumentationService,
+  isLiveVersion,
+  type DocumentationItem,
+  type PublishedDocInfo,
+} from "~/services/documentation.service"
+import IconFileText from "~icons/lucide/file-text"
+import IconLoader2 from "~icons/lucide/loader-2"
+import IconShare2 from "~icons/lucide/share-2"
+import IconPenLine from "~icons/lucide/pen-line"
+import IconCheveronDown from "~icons/lucide/chevron-down"
+import IconCopy from "~icons/lucide/copy"
+import IconCheck from "~icons/lucide/check"
+import IconPlus from "~icons/lucide/plus"
+import IconEye from "~icons/lucide/eye"
+import type {
+  CreatePublishedDocsArgs,
+  UpdatePublishedDocsArgs,
+} from "~/helpers/backend/graphql"
+import { platform } from "~/platform"
+import * as TE from "fp-ts/TaskEither"
+import { pipe } from "fp-ts/function"
+import { refAutoReset } from "@vueuse/core"
+const { copy: copyText } = useClipboard()
 const t = useI18n()
 const toast = useToast()
 const props = withDefaults(
@@ -364,7 +381,6 @@ const isLoadingTeamCollection = ref<boolean>(false)
 const isSavingDocumentation = ref<boolean>(false)
 const isProcessingPublish = ref<boolean>(false)
 const copyIcon = refAutoReset(markRaw(IconCopy), 3000)
-const { copy } = useClipboard()
 const allItems = ref<Array<any>>([])
 const showAllDocumentation = ref<boolean>(false)
 const showPublishModal = ref<boolean>(false)
@@ -523,8 +539,7 @@ async function publishLocal() {
 }
 async function copyLocalLink() {
   if (!publishedLink.value) return
-  await invoke("workbench_copy_text", { text: publishedLink.value })
-  toast.success(t("documentation.publish.url_copied"))
+  await copyText(publishedLink.value)
 }
 async function unpublishLocal() {
   const id = localCollectionID.value
@@ -648,11 +663,12 @@ watch(showPublishModal, (isOpen) => {
     isViewingSnapshot.value = false
   }
 })
-const copyPublishedUrl = () => {
-  if (existingPublishedData.value?.url) {
+const copyPublishedUrl = async () => {
+  if (
+    existingPublishedData.value?.url &&
+    (await copyText(existingPublishedData.value.url))
+  ) {
     copyIcon.value = markRaw(IconCheck)
-    copy(existingPublishedData.value.url)
-    toast.success(t("documentation.publish.url_copied"))
   }
 }
 const emit = defineEmits<{
@@ -762,13 +778,7 @@ const saveCollectionDocumentationById = async (
 ): Promise<boolean> => {
   // Type guard to ensure it's a collection item
   if (item.type !== "collection") return false
-  const {
-    id: collectionId,
-    documentation,
-    isTeamItem,
-    pathOrID,
-    collectionData,
-  } = item
+  const { documentation, pathOrID, collectionData } = item
   if (pathOrID && collectionData) {
     const updatedCollection = {
       ...collectionData,
@@ -797,7 +807,7 @@ const saveRequestDocumentationById = async (
   item: DocumentationItem
 ): Promise<boolean> => {
   if (item.type !== "request") return false
-  const { documentation, isTeamItem, folderPath, requestData } = item
+  const { documentation, folderPath, requestData } = item
   if (
     folderPath !== undefined &&
     item.requestIndex !== undefined &&

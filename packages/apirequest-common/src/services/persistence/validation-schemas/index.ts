@@ -34,6 +34,7 @@ const EncodeMode = z.enum(["enable", "disable", "auto"])
 const SettingsDefSchema = z.object({
   syncCollections: z.boolean(),
   syncHistory: z.boolean(),
+  RECORD_HISTORY: z.boolean().default(true),
   syncEnvironments: z.boolean(),
   URL_EXCLUDES: z.object({
     auth: z.boolean(),

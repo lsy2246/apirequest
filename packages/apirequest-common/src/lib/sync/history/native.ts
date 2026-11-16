@@ -1,10 +1,21 @@
-import { GQL_REQ_SCHEMA_VERSION, RESTReqSchemaVersion } from "@apirequest/data";
-import { ref } from "vue";
-import { nativeHistory } from "~/helpers/native-workbench-history";
-import { historyResultSnapshots, uploadHistoryResult } from "~/helpers/workbench-history-results";
-import { graphqlHistoryStore, HISTORY_LIMIT, restHistoryStore, setGraphqlHistoryEntries, setRESTHistoryEntries, type GQLHistoryEntry, type RESTHistoryEntry } from "~/newstore/history";
-import { getSyncInitFunction } from "..";
-import { isHistoryStoreEnabled } from "./status";
+import { GQL_REQ_SCHEMA_VERSION, RESTReqSchemaVersion } from "@apirequest/data"
+import { ref } from "vue"
+import { nativeHistory } from "~/helpers/native-workbench-history"
+import {
+  historyResultSnapshots,
+  uploadHistoryResult,
+} from "~/helpers/workbench-history-results"
+import {
+  graphqlHistoryStore,
+  HISTORY_LIMIT,
+  restHistoryStore,
+  setGraphqlHistoryEntries,
+  setRESTHistoryEntries,
+  type GQLHistoryEntry,
+  type RESTHistoryEntry,
+} from "~/newstore/history"
+import { getSyncInitFunction } from ".."
+import { isFetchingHistoryStoreStatus, isHistoryStoreEnabled } from "./status"
 
 type Entry = RESTHistoryEntry | GQLHistoryEntry
 
@@ -107,6 +118,7 @@ export async function queryNativeHistory(query: {
 
 export async function initNativeHistory() {
   isHistoryStoreEnabled.value = true
+  isFetchingHistoryStoreStatus.value = false
   const [rest, graphql] = await Promise.all([
     nativeHistory<NativeHistoryRecord<RESTHistoryEntry>[]>({
       type: "list",

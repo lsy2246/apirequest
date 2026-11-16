@@ -1,15 +1,7 @@
 <template>
-  <div :class="toggleOnly ? undefined : 'border-b border-divider px-6 py-3'">
+  <div class="shrink-0">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <WorkbenchToggle
-        :on="policy?.enabled"
-        :disabled="busy || !policy"
-        @change="toggleSaving"
-      >
-        {{ t("history_results.save_results") }}
-      </WorkbenchToggle>
       <HoppButtonSecondary
-        v-if="!toggleOnly"
         :label="t('history_results.cleanup')"
         :disabled="!policy"
         outline
@@ -24,7 +16,7 @@
     </p>
 
     <HoppSmartModal
-      v-if="!toggleOnly && showCleanup && policy"
+      v-if="showCleanup && policy"
       dialog
       :title="t('history_results.cleanup')"
       styles="sm:max-w-xl"
@@ -198,8 +190,6 @@ import {
   type HistoryResultPolicy,
 } from "~/helpers/workbench-history-results"
 
-defineProps<{ toggleOnly?: boolean }>()
-
 const t = useI18n()
 const { entries } = useWorkbenchCollections()
 
@@ -293,16 +283,6 @@ function loadPolicy() {
     const value = await historyResultAPI<HistoryResultPolicy>("policy")
     syncPolicy(value)
     days.value = value.retentionDays
-  })
-}
-
-function toggleSaving(enabled: boolean) {
-  void execute(async () => {
-    const updated = await historyResultAPI<HistoryResultPolicy>(
-      "policy",
-      json("PUT", { enabled })
-    )
-    policy.value = updated
   })
 }
 

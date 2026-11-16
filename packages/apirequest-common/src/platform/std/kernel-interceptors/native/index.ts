@@ -106,7 +106,7 @@ export class NativeKernelInterceptorService
                       case "version":
                         return t("error.version.heading")
                       case "abort":
-                        return t("error.aborted.heading")
+                        return t("error.abort.heading")
                       default:
                         return t("error.unknown.heading")
                     }
@@ -149,8 +149,9 @@ export class NativeKernelInterceptorService
                           cause: error.cause ?? t("error.unknown.cause"),
                         })
                       case "abort":
-                        return t("error.aborted.description", {
+                        return t("error.abort.description", {
                           message: error.message,
+                          cause: t("error.unknown.cause"),
                         })
                       default:
                         return t("error.unknown.description")

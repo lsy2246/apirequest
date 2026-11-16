@@ -199,29 +199,33 @@
 </template>
 
 <script setup lang="ts">
-import IconInfo from "~icons/lucide/info";
-import IconUpRight from "~icons/lucide/arrow-up-right";
-import IconDownLeft from "~icons/lucide/arrow-down-left";
-import IconCopy from "~icons/lucide/copy";
-import IconCheck from "~icons/lucide/check";
-import IconChevronDown from "~icons/lucide/chevron-down";
-import IconWrapText from "~icons/lucide/wrap-text";
-import * as LJSON from "lossless-json";
-import * as O from "fp-ts/Option";
-import { pipe } from "fp-ts/function";
-import { ref, computed, reactive, watch, markRaw, PropType } from "vue";
-import { refAutoReset, useTimeAgo } from "@vueuse/core";
-import { LogEntryData } from "./Log.vue";
-import { useI18n } from "@composables/i18n";
-import { copyToClipboard } from "~/helpers/utils/clipboard";
-import { isJSON } from "~/helpers/functional/json";
-import { useCopyResponse, useDownloadResponse } from "@composables/lens-actions";
-import { useCodemirror } from "@composables/codemirror";
-import jsonParse, { JSONObjectMember, JSONValue } from "~/helpers/jsonParse";
-import { getJSONOutlineAtPos } from "~/helpers/newOutline";
-import { convertIndexToLineCh, convertLineChToIndex } from "~/helpers/editor/utils";
-import { shortDateTime } from "~/helpers/utils/date";
+import IconInfo from "~icons/lucide/info"
+import IconUpRight from "~icons/lucide/arrow-up-right"
+import IconDownLeft from "~icons/lucide/arrow-down-left"
+import IconCopy from "~icons/lucide/copy"
+import IconCheck from "~icons/lucide/check"
+import IconChevronDown from "~icons/lucide/chevron-down"
+import IconWrapText from "~icons/lucide/wrap-text"
+import * as LJSON from "lossless-json"
+import * as O from "fp-ts/Option"
+import { pipe } from "fp-ts/function"
+import { ref, computed, reactive, watch, markRaw, PropType } from "vue"
+import { refAutoReset, useTimeAgo } from "@vueuse/core"
+import { LogEntryData } from "./Log.vue"
+import { useI18n } from "@composables/i18n"
+import { useClipboard } from "~/composables/clipboard"
+import { isJSON } from "~/helpers/functional/json"
+import { useCopyResponse, useDownloadResponse } from "@composables/lens-actions"
+import { useCodemirror } from "@composables/codemirror"
+import jsonParse, { JSONObjectMember, JSONValue } from "~/helpers/jsonParse"
+import { getJSONOutlineAtPos } from "~/helpers/newOutline"
+import {
+  convertIndexToLineCh,
+  convertLineChToIndex,
+} from "~/helpers/editor/utils"
+import { shortDateTime } from "~/helpers/utils/date"
 
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
 
 const props = defineProps({
@@ -332,8 +336,8 @@ const copyQueryIcon = refAutoReset<typeof IconCopy | typeof IconCheck>(
   1000
 )
 
-const copyQuery = (entry: string) => {
-  copyToClipboard(entry)
+const copyQuery = async (entry: string) => {
+  if (!(await copyToClipboard(entry))) return
   copyQueryIcon.value = IconCheck
 }
 

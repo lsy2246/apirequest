@@ -1,3 +1,5 @@
+import { settingsStore } from "~/newstore/settings"
+import { isHistoryStoreEnabled } from "~/lib/sync/history/status"
 import { captureGraphqlHistoryResult } from "~/helpers/workbench-history-results"
 import type { RelayResponse } from "@apirequest/kernel"
 import {
@@ -1543,6 +1545,8 @@ export class GQLTabConnectionService extends Service {
     relayResponse?: RelayResponse,
     duration?: number
   ) {
+    if (!settingsStore.value.RECORD_HISTORY || !isHistoryStoreEnabled.value)
+      return
     const { name, url, request, query, variables } = options
     addGraphqlHistoryEntry(
       captureGraphqlHistoryResult(

@@ -77,40 +77,50 @@
 </template>
 
 <script setup lang="ts">
-import IconPlay from "~icons/lucide/play";
-import IconStop from "~icons/lucide/stop-circle";
-import IconSave from "~icons/lucide/save";
-import IconTrash2 from "~icons/lucide/trash-2";
-import IconCopy from "~icons/lucide/copy";
-import IconCheck from "~icons/lucide/check";
-import IconInfo from "~icons/lucide/info";
-import IconWand from "~icons/lucide/wand";
-import IconWrapText from "~icons/lucide/wrap-text";
-import { onBeforeUnmount, onMounted, reactive, ref, markRaw, watch, nextTick, computed } from "vue";
-import { copyToClipboard } from "@helpers/utils/clipboard";
-import { useCodemirror } from "@composables/codemirror";
-import { useI18n } from "@composables/i18n";
-import { refAutoReset, useVModel } from "@vueuse/core";
-import { useToast } from "~/composables/toast";
-import { getPlatformSpecialKey as getSpecialKey } from "~/helpers/platformutils";
-import { OperationDefinitionNode, parse, print } from "graphql";
-import { createGQLQueryLinter } from "~/helpers/editor/linting/gqlQuery";
-import queryCompleter from "~/helpers/editor/completion/gqlQuery";
-import { selectedGQLOpHighlight } from "~/helpers/editor/gql/operation";
-import { debounce } from "lodash-es";
-import { ViewUpdate } from "@codemirror/view";
-import { defineActionHandler } from "~/helpers/actions";
-import { GQLTabConnectionService } from "~/services/gql-tab-connection.service";
-import { useNestedSetting } from "~/composables/settings";
-import { toggleNestedSetting } from "~/newstore/settings";
-import { useService } from "dioc/vue";
-import { GQLQueryBuilderService } from "~/services/gql-query-builder.service";
-import type { SubscriptionState } from "~/services/gql-tab-connection.service";
-import type { AggregateEnvironment } from "~/newstore/environments";
+import IconPlay from "~icons/lucide/play"
+import IconStop from "~icons/lucide/stop-circle"
+import IconSave from "~icons/lucide/save"
+import IconTrash2 from "~icons/lucide/trash-2"
+import IconCopy from "~icons/lucide/copy"
+import IconCheck from "~icons/lucide/check"
+import IconInfo from "~icons/lucide/info"
+import IconWand from "~icons/lucide/wand"
+import IconWrapText from "~icons/lucide/wrap-text"
+import {
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  markRaw,
+  watch,
+  nextTick,
+  computed,
+} from "vue"
+import { useClipboard } from "~/composables/clipboard"
+import { useCodemirror } from "@composables/codemirror"
+import { useI18n } from "@composables/i18n"
+import { refAutoReset, useVModel } from "@vueuse/core"
+import { useToast } from "~/composables/toast"
+import { getPlatformSpecialKey as getSpecialKey } from "~/helpers/platformutils"
+import { OperationDefinitionNode, parse, print } from "graphql"
+import { createGQLQueryLinter } from "~/helpers/editor/linting/gqlQuery"
+import queryCompleter from "~/helpers/editor/completion/gqlQuery"
+import { selectedGQLOpHighlight } from "~/helpers/editor/gql/operation"
+import { debounce } from "lodash-es"
+import { ViewUpdate } from "@codemirror/view"
+import { defineActionHandler } from "~/helpers/actions"
+import { GQLTabConnectionService } from "~/services/gql-tab-connection.service"
+import { useNestedSetting } from "~/composables/settings"
+import { toggleNestedSetting } from "~/newstore/settings"
+import { useService } from "dioc/vue"
+import { GQLQueryBuilderService } from "~/services/gql-query-builder.service"
+import type { SubscriptionState } from "~/services/gql-tab-connection.service"
+import type { AggregateEnvironment } from "~/newstore/environments"
 
 // Template refs
 const queryEditor = ref<any | null>(null)
 
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
 const toast = useToast()
 
@@ -306,10 +316,9 @@ const prettifyQuery = () => {
   }
 }
 
-const copyQuery = () => {
-  copyToClipboard(gqlQueryString.value)
+const copyQuery = async () => {
+  if (!(await copyToClipboard(gqlQueryString.value))) return
   copyQueryIcon.value = IconCheck
-  toast.success(`${t("state.copied_to_clipboard")}`)
 }
 
 const clearGQLQuery = () => {

@@ -19,30 +19,19 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from "vue";
-import IconCopy from "~icons/lucide/copy";
-import IconCheck from "~icons/lucide/check";
-import { useI18n } from "~/composables/i18n";
-import { useToast } from "~/composables/toast";
+import { useClipboard } from "~/composables/clipboard"
+import IconCopy from "~icons/lucide/copy"
+import IconCheck from "~icons/lucide/check"
+import { useI18n } from "~/composables/i18n"
 
+const { copy: copyText, copied } = useClipboard()
 const t = useI18n()
-const toast = useToast()
 
 const props = defineProps<{
   query?: string
 }>()
 
-const copied = ref(false)
-
-const copyToClipboard = async () => {
-  if (!props.query) return
-  try {
-    await navigator.clipboard.writeText(props.query)
-    copied.value = true
-    toast.success(t("documentation.copied_to_clipboard"))
-    setTimeout(() => (copied.value = false), 1000)
-  } catch (err) {
-    console.error("Failed to copy: ", err)
-  }
+const copyToClipboard = () => {
+  if (props.query !== undefined) return copyText(props.query)
 }
 </script>

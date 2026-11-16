@@ -120,16 +120,21 @@
   </div>
 </template>
 <script setup lang="ts">
-import formatXML from "xml-formatter";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { useI18n } from "~/composables/i18n";
-import { copyToClipboard } from "~/helpers/utils/clipboard";
-import { parseCaptureEvents, type CaptureBody, type CaptureHeaders } from "~/helpers/workbench-capture";
-import { decodeCaptureBytes } from "~/helpers/workbench-capture-body";
-import WorkbenchSelect from "~/components/workbench/Select.vue";
-import ConsoleValue from "~/components/console/Value.vue";
-import BodyFind from "~/components/capture/BodyFind.vue";
-import IconSearch from "~icons/lucide/search";
+import formatXML from "xml-formatter"
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
+import { useI18n } from "~/composables/i18n"
+import { useClipboard } from "~/composables/clipboard"
+import {
+  parseCaptureEvents,
+  type CaptureBody,
+  type CaptureHeaders,
+} from "~/helpers/workbench-capture"
+import { decodeCaptureBytes } from "~/helpers/workbench-capture-body"
+import WorkbenchSelect from "~/components/workbench/Select.vue"
+import ConsoleValue from "~/components/console/Value.vue"
+import BodyFind from "~/components/capture/BodyFind.vue"
+import IconSearch from "~icons/lucide/search"
+const { copy: copyToClipboard } = useClipboard()
 const props = defineProps<{
   body?: CaptureBody
   headers?: CaptureHeaders

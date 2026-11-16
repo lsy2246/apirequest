@@ -52,10 +52,7 @@
           </div>
         </HoppSmartTab>
 
-        <HoppSmartTab
-          id="variables"
-          :label="`${t('tab.variables')}`"
-        >
+        <HoppSmartTab id="variables" :label="`${t('tab.variables')}`">
           <CollectionsVariables
             v-model="editableCollection.variables"
             :inherited-properties="editingProperties.inheritedProperties"
@@ -64,10 +61,7 @@
           />
         </HoppSmartTab>
 
-        <HoppSmartTab
-          id="scripts"
-          :label="`${t('tab.scripts')}`"
-        >
+        <HoppSmartTab id="scripts" :label="`${t('tab.scripts')}`">
           <div class="flex flex-col flex-1">
             <HoppSmartTabs
               v-model="activeScriptsTab"
@@ -204,34 +198,43 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
-import { refAutoReset, useVModel } from "@vueuse/core";
-import { clone } from "lodash-es";
-import { useCodemirror } from "@composables/codemirror";
-import { useI18n } from "@composables/i18n";
-import { useToast } from "~/composables/toast";
-import preRequestCompleter from "~/helpers/editor/completion/preRequest";
-import testScriptCompleter from "~/helpers/editor/completion/testScript";
-import preRequestLinter from "~/helpers/editor/linting/preRequest";
-import testScriptLinter from "~/helpers/editor/linting/testScript";
-import { copyToClipboard } from "~/helpers/utils/clipboard";
-import { useService } from "dioc/vue";
-import { useReadonlyStream } from "@composables/stream";
-import { aggregateEnvsWithCurrentValue$, getAggregateEnvsWithCurrentValue } from "~/newstore/environments";
-import { transformInheritedCollectionVariablesToAggregateEnv } from "~/helpers/utils/inheritedCollectionVarTransformer";
+import { computed, reactive, ref, watch } from "vue"
+import { refAutoReset, useVModel } from "@vueuse/core"
+import { clone } from "lodash-es"
+import { useCodemirror } from "@composables/codemirror"
+import { useI18n } from "@composables/i18n"
+import preRequestCompleter from "~/helpers/editor/completion/preRequest"
+import testScriptCompleter from "~/helpers/editor/completion/testScript"
+import preRequestLinter from "~/helpers/editor/linting/preRequest"
+import testScriptLinter from "~/helpers/editor/linting/testScript"
+import { useClipboard } from "~/composables/clipboard"
+import { useService } from "dioc/vue"
+import { useReadonlyStream } from "@composables/stream"
+import {
+  aggregateEnvsWithCurrentValue$,
+  getAggregateEnvsWithCurrentValue,
+} from "~/newstore/environments"
+import { transformInheritedCollectionVariablesToAggregateEnv } from "~/helpers/utils/inheritedCollectionVarTransformer"
 
-import { HoppCollection, HoppCollectionVariable, HoppRESTAuth, HoppGQLAuth, HoppRESTHeaders, GQLHeader } from "@apirequest/data";
-import { hasActualScript } from "@apirequest/js-sandbox/scripting";
-import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties";
-import { PersistenceService } from "~/services/persistence";
+import {
+  HoppCollection,
+  HoppCollectionVariable,
+  HoppRESTAuth,
+  HoppGQLAuth,
+  HoppRESTHeaders,
+  GQLHeader,
+} from "@apirequest/data"
+import { hasActualScript } from "@apirequest/js-sandbox/scripting"
+import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties"
+import { PersistenceService } from "~/services/persistence"
 
-import IconCheck from "~icons/lucide/check";
-import IconCopy from "~icons/lucide/copy";
-import { RESTOptionTabs } from "../http/RequestOptions.vue";
+import IconCheck from "~icons/lucide/check"
+import IconCopy from "~icons/lucide/copy"
+import { RESTOptionTabs } from "../http/RequestOptions.vue"
 
 const persistenceService = useService(PersistenceService)
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
-const toast = useToast()
 
 export type EditingProperties = {
   collection: Partial<HoppCollection> | null
@@ -468,9 +471,8 @@ const changeOptionTab = (tab: RESTOptionTabs) => {
   activeTab.value = tab
 }
 
-const copyCollectionID = () => {
-  copyToClipboard(props.editingProperties.path)
+const copyCollectionID = async () => {
+  if (!(await copyToClipboard(props.editingProperties.path))) return
   copyIcon.value = IconCheck
-  toast.success(t("state.copied_to_clipboard"))
 }
 </script>

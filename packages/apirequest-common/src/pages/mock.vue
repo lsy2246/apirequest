@@ -32,7 +32,7 @@
       <IconServer class="mb-4 h-12 w-12 text-secondaryLight" />
       <p class="mb-4 text-secondaryLight">{{ t("workbench.mock_login") }}</p>
       <HoppButtonPrimary
-        :label="t('auth.login')"
+        :label="t('workbench.reconnect_local')"
         @click="invokeAction('workspace.reconnect')"
       />
     </div>

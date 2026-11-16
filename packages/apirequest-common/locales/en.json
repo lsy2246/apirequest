@@ -135,22 +135,22 @@
     "copy_interface_type": "Copy interface type",
     "copy_user_id": "Copy User Auth Token",
     "developer_option": "Developer options",
-    "developer_option_description": "Developer tools which helps in development and maintenance of apirequest.",
+    "developer_option_description": "Developer tools which helps in development and maintenance of API Request.",
     "discord": "Discord",
     "documentation": "Documentation",
     "github": "GitHub",
     "help": "Help & feedback",
     "home": "Home",
     "invite": "Invite",
-    "invite_description": "apirequest is an open source API development ecosystem. We designed a simple and intuitive interface for creating and managing your APIs. apirequest is a tool that helps you build, test, document and share your APIs.",
+    "invite_description": "API Request is a local API workbench for HTTP, GraphQL, WebSocket, Mock services, automated tests, API documentation and traffic capture.",
     "invite_your_friends": "Invite your friends",
     "join_discord_community": "Join our Discord community",
     "keyboard_shortcuts": "Keyboard shortcuts",
     "name": "API Request",
     "new_version_found": "New version found. Refresh to update.",
-    "open_in_apirequest": "Open in apirequest",
+    "open_in_apirequest": "Open in API Request",
     "options": "Options",
-    "powered_by": "Powered by apirequest",
+    "powered_by": "Powered by API Request",
     "proxy_privacy_policy": "Proxy privacy policy",
     "reload": "Reload",
     "search": "Search and commands",
@@ -165,7 +165,7 @@
     "twitter": "Twitter",
     "type_a_command_search": "Type a command or search…",
     "we_use_cookies": "We use cookies",
-    "updated_text": "apirequest has been updated to v{version} 🎉",
+    "updated_text": "API Request has been updated to v{version} 🎉",
     "whats_new": "What's new?",
     "see_whats_new": "See what's new",
     "wiki": "Wiki",
@@ -176,7 +176,7 @@
     "open_navigation": "Open Navigation",
     "read_documentation": "Read Documentation",
     "default": "default: {value}",
-    "star_on_github": "Star apirequest on GitHub",
+    "star_on_github": "Star API Request on GitHub",
     "github_star": "Star",
     "terms_of_service": "Terms of Service"
   },
@@ -194,7 +194,7 @@
     "logged_out": "Logged out",
     "login": "Login",
     "login_success": "Successfully logged in",
-    "login_to_apirequest": "Login to apirequest",
+    "login_to_apirequest": "Login to API Request",
     "logout": "Logout",
     "re_enter_email": "Re-enter email",
     "send_magic_link": "Send a magic link",
@@ -203,17 +203,17 @@
     "we_sent_magic_link_description": "Check your inbox - we sent an email to {email}. It contains a magic link that will log you in.",
     "desktop": {
       "continue_in_browser": "Continue in your browser",
-      "browser_opened": "We have opened apirequest in your browser to continue your login.",
+      "browser_opened": "We have opened API Request in your browser to continue your login.",
       "open_again": "Open Again",
       "login_error_description": "There was an error processing your login...",
       "login_complete": "Login Complete",
       "login_complete_description": "You have logged in to the desktop app. You can close this browser window.",
       "login_error": "Login Error",
       "retry_on_same_device": "There was an error while logging you in to the desktop app. Make sure you are using the desktop app on the same device and it is open and try again.",
-      "login_title": "Login to apirequest Desktop",
+      "login_title": "Login to API Request Desktop",
       "login_to_continue": "Please login to continue.",
       "confirm_login": "Confirm Desktop Login",
-      "confirm_login_description": "Are you sure you want to confirm login to your account in apirequest Desktop?"
+      "confirm_login_description": "Are you sure you want to confirm login to your account in API Request Desktop?"
     }
   },
   "authorization": {
@@ -265,7 +265,8 @@
       "auth_request": "Auth Request",
       "token_request": "Token Request",
       "refresh_request": "Refresh Request",
-      "send_in": "Send In"
+      "send_in": "Send In",
+      "refresh_token_failed": "Could not refresh the access token. Please retry."
     },
     "pass_key_by": "Pass by",
     "pass_by_query_params_label": "Query Parameters",
@@ -281,7 +282,7 @@
     "type": "Authorization Type",
     "username": "Username",
     "advance_config": "Advanced Configuration",
-    "advance_config_description": "apirequest automatically assigns default values to certain fields if no explicit value is provided",
+    "advance_config_description": "API Request automatically assigns default values to certain fields if no explicit value is provided",
     "algorithm": "Algorithm",
     "payload": "Payload",
     "secret": "Secret",
@@ -373,7 +374,8 @@
     "select_location": "Select location",
     "sorted": "Collection sorted",
     "details": "Details",
-    "duplicated": "Collection duplicated"
+    "duplicated": "Collection duplicated",
+    "import": "Import collection"
   },
   "confirm": {
     "close_unsaved_tab": "Are you sure you want to close this tab?",
@@ -507,7 +509,7 @@
     "error_rendering_markdown": "Error rendering markdown:",
     "fetching_documentation": "Fetching Documentation...",
     "generate": "Generate documentation",
-    "generate_message": "Import any apirequest collection to generate API documentation on-the-go.",
+    "generate_message": "Import any API Request collection to generate API documentation on-the-go.",
     "headers": {
       "no_headers": "No headers defined",
       "title": "Headers"
@@ -641,7 +643,7 @@
     "request_variables": "This request does not have any request variables",
     "schema": "Connect to a GraphQL endpoint to view schema",
     "search_environment": "No matching environment found for",
-    "secret_environments": "Secrets are not synced to apirequest",
+    "secret_environments": "Secrets are not synced to API Request",
     "shared_requests": "Shared requests are empty",
     "shared_requests_logout": "Login to view your shared requests or create a new one",
     "subscription": "Subscriptions are empty",
@@ -734,12 +736,13 @@
     },
     "abort": {
       "heading": "Request Aborted",
-      "description": "Operation cancelled. {message}: {cause}"
+      "description": "The request was cancelled. {message}"
     },
     "unknown": {
       "heading": "Unknown Error",
       "description": "An unknown error occurred.",
-      "cause": "Unknown cause"
+      "cause": "Unknown cause",
+      "phase": "unknown phase"
     },
     "extension": {
       "heading": "Extension error",
@@ -788,7 +791,8 @@
     "generate_access_token": "Something went wrong while generating the access token",
     "delete_access_token": "Something went wrong while deleting the access token",
     "extension_not_found": "Extension not found",
-    "invalid_request": "Invalid request data"
+    "invalid_request": "Invalid request data",
+    "copy_failed": "Copy failed. Please retry."
   },
   "export": {
     "curl": "Export cURL",
@@ -798,7 +802,7 @@
     "choose_format": "Choose export format",
     "collection": "Export collection",
     "collections": "Export collections",
-    "format_apirequest": "Export as apirequest JSON",
+    "format_apirequest": "Export as API Request JSON",
     "format_openapi_json": "Export as OpenAPI 3.1 (JSON)",
     "format_openapi_yaml": "Export as OpenAPI 3.1 (YAML)",
     "openapi_lossy_summary": "OpenAPI export drops scripts, auth credentials, inactive items, duplicate paths, and duplicate response status codes.",
@@ -901,8 +905,8 @@
     "collection_properties_scripts": "These scripts will run for every request in this collection. Pre-request scripts run before the request, test scripts run after the response.",
     "generate_documentation_first": "Generate documentation first",
     "network_fail": "Unable to reach the API endpoint. Check your network connection or select a different Interceptor and try again.",
-    "offline": "You're using apirequest offline. Updates will sync when you're online, based on workspace settings.",
-    "offline_short": "You're using apirequest offline.",
+    "offline": "You're using API Request offline. Updates will sync when you're online, based on workspace settings.",
+    "offline_short": "You're using API Request offline.",
     "post_request_tests": "Post-request scripts are written in JavaScript, and are run after the response is received.",
     "pre_request_script": "Pre-request scripts are written in JavaScript, and are run before the request is sent.",
     "script_fail": "It seems there is a glitch in the pre-request script. Check the error below and fix the script accordingly.",
@@ -920,18 +924,18 @@
     "collections": "Import collections",
     "curl": "Import cURL",
     "environments_from_gist": "Import From Gist",
-    "environments_from_gist_description": "Import apirequest Environments From Gist",
+    "environments_from_gist_description": "Import API Request Environments From Gist",
     "failed": "Error while importing: format not recognized",
     "from_file": "Import from File",
     "from_gist": "Import from Gist",
     "from_gist_description": "Import from Gist URL",
-    "from_gist_import_summary": "All apirequest features are imported.",
-    "from_apirequest_importer_summary": "All apirequest features are imported.",
+    "from_gist_import_summary": "All API Request features are imported.",
+    "from_apirequest_importer_summary": "All API Request features are imported.",
     "from_insomnia": "Import from Insomnia",
     "from_insomnia_description": "Import from Insomnia collection",
     "from_insomnia_import_summary": "Collections and Requests will be imported.",
-    "from_json": "Import from apirequest",
-    "from_json_description": "Import from apirequest collection file",
+    "from_json": "Import from API Request",
+    "from_json_description": "Import from API Request collection file",
     "from_my_collections": "Import from Personal Collections",
     "from_my_collections_description": "Import from Personal Collections file",
     "from_all_collections": "Import from Another Workspace",
@@ -950,14 +954,14 @@
     "from_har_description": "Import from HAR file",
     "from_har_import_summary": "Requests will be imported to a default collection.",
     "gql_collections_from_gist_description": "Import GraphQL Collections From Gist",
-    "apirequest_environment": "apirequest Environment",
-    "apirequest_environment_description": "Import apirequest Environment JSON file",
+    "apirequest_environment": "API Request Environment",
+    "apirequest_environment_description": "Import API Request Environment JSON file",
     "import_from_url_invalid_fetch": "Couldn't get data from the url",
     "import_from_url_invalid_file_format": "Error while importing collections",
     "import_from_url_invalid_type": "Unsupported type. accepted values are 'apirequest', 'openapi', 'postman', 'insomnia'",
     "import_from_url_success": "Collections Imported",
     "insomnia_environment_description": "Import Insomnia Environment from a JSON/YAML file",
-    "json_description": "Import collections from a apirequest Collections JSON file",
+    "json_description": "Import collections from a API Request Collections JSON file",
     "postman_environment": "Postman Environment",
     "postman_environment_description": "Import Postman Environment from a JSON file",
     "title": "Import",
@@ -972,7 +976,6 @@
     "import_summary_not_supported_by_apirequest_import": "We do not support importing {featureLabel} from this source right now.",
     "import_summary_script_found": "script found but not imported",
     "import_summary_scripts_found": "scripts found but not imported",
-    "import_summary_enable_experimental_sandbox": "To import Postman scripts, enable 'Experimental scripting sandbox' in settings. Note: This feature is experimental.",
     "cors_error_modal": {
       "title": "CORS Error Detected",
       "description": "The import failed due to CORS (Cross-Origin Resource Sharing) restrictions imposed by the server.",
@@ -982,7 +985,7 @@
     }
   },
   "instances": {
-    "switch": "Switch apirequest Instance",
+    "switch": "Switch API Request Instance",
     "enter_server_url": "Connect to a self-hosted instance",
     "already_connected": "You are already connected to this instance",
     "recent_connections": "Recent Connections",
@@ -1034,7 +1037,7 @@
       "not_found": "Environment variable '{environment}' not found."
     },
     "header": {
-      "cookie": "The browser doesn't allow apirequest to set Cookie Headers. Please use Authorization Headers instead. However, our apirequest Desktop App is live now and supports Cookies."
+      "cookie": "The browser doesn't allow API Request to set Cookie Headers. Please use Authorization Headers instead. However, our API Request Desktop App is live now and supports Cookies."
     },
     "response": {
       "401_error": "Please check your authentication credentials.",
@@ -1367,7 +1370,7 @@
     "save_as": "Save as",
     "saved": "Request saved",
     "share": "Share",
-    "share_description": "Share apirequest with your friends",
+    "share_description": "Share API Request with your friends",
     "share_request": "Share Request",
     "stop": "Stop",
     "switch_protocol": "Switch protocol",
@@ -1443,7 +1446,7 @@
     "delete_account_description": "Once you delete your account, all your data will be permanently deleted. This action cannot be undone.",
     "desktop": "Desktop",
     "desktop_connection": "Connection",
-    "desktop_description": "Update behavior, connection timeouts, keyboard handling, and display preferences for the apirequest desktop app.",
+    "desktop_description": "Update behavior, connection timeouts, keyboard handling, and display preferences for the API Request desktop app.",
     "desktop_display": "Display",
     "desktop_keyboard": "Keyboard",
     "desktop_keyboard_strategy_label": "Match shortcuts by typed letter or physical position",
@@ -1471,7 +1474,6 @@
     "enable_encode_mode_tooltip": "Always encode the parameters in the request",
     "expand_navigation": "Expand navigation",
     "experiments": "Experiments",
-    "experiments_notice": "This is a collection of experiments we're working on that might turn out to be useful, fun, both, or neither. They're not final and may not be stable, so if something overly weird happens, don't panic. Just turn the dang thing off. Jokes aside, ",
     "follow": "Follow us",
     "general": "General",
     "general_description": " General settings used in the application",
@@ -1479,7 +1481,6 @@
     "interceptor_description": "Middleware between application and APIs.",
     "language": "Language",
     "light_mode": "Light",
-    "official_proxy_hosting": "Official Proxy is hosted by API Request.",
     "query_parameters_encoding": "Query Parameters Encoding",
     "query_parameters_encoding_description": "Configure encoding for query parameters in requests",
     "profile": "Profile",
@@ -1496,7 +1497,7 @@
     "short_codes": "Short codes",
     "short_codes_description": "Short codes which were created by you.",
     "sidebar_on_left": "Sidebar on left",
-    "ai_experiments": "AI Experiments",
+    "ai_experiments": "AI assistance",
     "ai_request_naming_style": "Request Naming Style",
     "ai_request_naming_style_descriptive_with_spaces": "Descriptive With Spaces",
     "ai_request_naming_style_camel_case": "Camel Case ( camelCase )",
@@ -1512,7 +1513,6 @@
     "sync_description": "These settings are synced to cloud.",
     "sync_environments": "Environments",
     "sync_history": "History",
-    "history_disabled": "History is disabled. Contact your organization admin to enable history",
     "system_mode": "System",
     "telemetry": "Telemetry",
     "telemetry_helps_us": "Telemetry helps us to personalize our operations and deliver the best experience to you.",
@@ -1555,17 +1555,19 @@
     "remove_domain": "Remove Domain",
     "ca_certificate": "CA Certificate",
     "ca_certificates": "CA Certificates",
-    "ca_certificates_support": "apirequest supports .crt, .cer or .pem files containing one or more certificates.",
+    "ca_certificates_support": "API Request supports .crt, .cer or .pem files containing one or more certificates.",
     "proxy_capabilities": "The desktop app supports HTTP/HTTPS/SOCKS proxies with NTLM and Basic authentication.",
     "local_proxy_capabilities": "The local web app supports HTTP/HTTPS/SOCKS proxies with username and password authentication.",
     "proxy_auth": "Include credentials in the URL, for example {url}.",
     "request_sending": "Request settings",
-    "request_sending_description": "Configure request certificates and proxy."
+    "request_sending_description": "Configure request certificates and proxy.",
+    "access_tokens": "Access tokens",
+    "access_tokens_description": "Manage access tokens for the CLI and private Mock services."
   },
   "shared_requests": {
     "auth_warning": "This request contains authentication credentials. Anyone with the share link will be able to read them — including tokens, passwords, and API keys.",
     "button": "Button",
-    "button_info": "Create a 'Run in apirequest' button for your website, blog or a README.",
+    "button_info": "Create a 'Run in API Request' button for your website, blog or a README.",
     "copy_html": "Copy HTML",
     "copy_link": "Copy Link",
     "copy_markdown": "Copy Markdown",
@@ -1574,14 +1576,14 @@
     "deleted": "Shared request deleted",
     "description": "Select a widget, you can change and customize this later",
     "embed": "Embed",
-    "embed_info": "Add a mini 'apirequest API Playground' to your website, blog or documentation.",
+    "embed_info": "Add a mini 'API Request API Playground' to your website, blog or documentation.",
     "link": "Link",
     "link_info": "Create a shareable link to share with anyone on the internet with view access.",
     "modified": "Shared request modified",
     "not_found": "Shared request not found",
     "open_new_tab": "Open in new tab",
     "preview": "Preview",
-    "run_in_apirequest": "Run in apirequest",
+    "run_in_apirequest": "Run in API Request",
     "theme": {
       "dark": "Dark",
       "light": "Light",
@@ -1619,7 +1621,7 @@
       "redo": "Redo"
     },
     "miscellaneous": {
-      "invite": "Invite people to apirequest",
+      "invite": "Invite people to API Request",
       "title": "Miscellaneous"
     },
     "navigation": {
@@ -1721,7 +1723,7 @@
       "disconnect": "Disconnect from server"
     },
     "miscellaneous": {
-      "invite": "Invite your friends to apirequest",
+      "invite": "Invite your friends to API Request",
       "title": "Miscellaneous"
     },
     "request": {
@@ -1944,7 +1946,8 @@
     "users_to_admin_success": "Selected users are elevated to admin status!!",
     "users_to_admin_failure": "Failed to elevate selected users to admin status!!",
     "loading_workspaces": "Loading workspaces",
-    "loading_collections_in_workspace": "Loading collections in workspace"
+    "loading_collections_in_workspace": "Loading collections in workspace",
+    "copied": "Copied"
   },
   "tab": {
     "authorization": "Authorization",
@@ -2040,7 +2043,7 @@
     "we_sent_invite_link": "Invitations are on the way",
     "invite_sent_smtp_disabled": "Invite links generated",
     "we_sent_invite_link_description": " New invitees will receive a link to join the workspace, existing members and pending invitees won't receive a new link.",
-    "invite_sent_smtp_disabled_description": "Sending invite emails is disabled for this instance of apirequest. Please use the Copy link button to copy and share the invite link manually.",
+    "invite_sent_smtp_disabled_description": "Sending invite emails is disabled for this instance of API Request. Please use the Copy link button to copy and share the invite link manually.",
     "copy_invite_link": "Copy Invite Link",
     "search_title": "Team Requests",
     "user_not_found": "User not found in the instance.",
@@ -2087,13 +2090,13 @@
   },
   "site_protection": {
     "login_to_continue": "Login to continue",
-    "login_to_continue_description": "You need to be logged in to access this apirequest Enterprise Instance.",
+    "login_to_continue_description": "You need to be logged in to access this API Request Enterprise Instance.",
     "error_fetching_site_protection_status": "Something Went Wrong While Fetching Site Protection Status"
   },
   "access_tokens": {
     "tab_title": "Tokens",
     "section_title": "Personal Access Tokens",
-    "section_description": "Personal access tokens currently helps you connect the CLI to your apirequest account",
+    "section_description": "Access tokens allow the CLI and private Mock services to access this workbench. Keep them private.",
     "last_used_on": "Last used on",
     "expires_on": "Expires on",
     "no_expiration": "No expiration",
@@ -2116,8 +2119,8 @@
     "execute_scripts": "Execute scripts",
     "collection_id": "Collection ID",
     "environment_id": "Environment ID",
-    "cli_collection_id_description": "This collection ID will be used by the CLI collection runner for apirequest.",
-    "cli_environment_id_description": "This environment ID will be used by the CLI collection runner for apirequest.",
+    "cli_collection_id_description": "This collection ID will be used by the CLI collection runner for API Request.",
+    "cli_environment_id_description": "This environment ID will be used by the CLI collection runner for API Request.",
     "include_active_environment": "Include active environment:",
     "cli": "CLI",
     "cli_comming_soon_for_personal_collection": "Collection Runner for personal collections in CLI is coming soon.",
@@ -2265,11 +2268,11 @@
       "title": "Authentication Providers",
       "update_failure": "Failed to update authentication provider configurations!!"
     },
-    "confirm_changes": "apirequest server must restart to reflect the new changes. Confirm changes made to the server configurations?",
+    "confirm_changes": "API Request server must restart to reflect the new changes. Confirm changes made to the server configurations?",
     "input_empty": "Please fill all the fields before updating the configurations",
     "data_sharing": {
       "title": "Data Sharing",
-      "description": "Help improve apirequest by sharing anonymous data",
+      "description": "Help improve API Request by sharing anonymous data",
       "enable": "Enable Data Sharing",
       "secondary_title": "Data Sharing Configurations",
       "see_shared": "See what is shared",
@@ -2295,7 +2298,7 @@
       "user": "MAILER USER"
     },
     "reset": {
-      "confirm_reset": "apirequest server must restart to reflect the new changes. Confirm the reset of server configurations?",
+      "confirm_reset": "API Request server must restart to reflect the new changes. Confirm the reset of server configurations?",
       "description": "Default configurations will be loaded as specified in the environment file",
       "failure": "Failed to reset configurations!!",
       "title": "Reset Configurations",
@@ -2311,15 +2314,15 @@
     "update_failure": "Failed to update server configurations",
     "restrict_access": "Restrict Access",
     "site_protection": {
-      "control_access": "Control who can access apirequest app",
-      "description": "Customize how visitors access your apirequest app using site protection settings.",
+      "control_access": "Control who can access API Request app",
+      "description": "Customize how visitors access your API Request app using site protection settings.",
       "enable": "Enable site protection",
-      "note": "Users visiting the apirequest app will see the login page, mandatory login is required to access the app. Admin approval is still required for authorization",
+      "note": "Users visiting the API Request app will see the login page, mandatory login is required to access the app. Admin approval is still required for authorization",
       "update_failure": "Failed to update site protection configurations!!"
     },
     "domain_whitelisting": {
       "add_domain": "Add New Domain",
-      "description": "Users with email ID registered in whitelisted domains does not require explicit approval from admin to access the apirequest app",
+      "description": "Users with email ID registered in whitelisted domains does not require explicit approval from admin to access the API Request app",
       "enable": "Enable domain whitelisting",
       "enter_domain": "Enter domain",
       "title": "Whitelisted Domains",
@@ -2356,11 +2359,11 @@
     }
   },
   "data_sharing": {
-    "description": "Share anonymous data usage to improve apirequest",
+    "description": "Share anonymous data usage to improve API Request",
     "enable": "Enable Data Sharing",
     "see_shared": "See what is shared",
-    "toggle_description": "Share data and make apirequest better",
-    "title": "Make apirequest Better",
+    "toggle_description": "Share data and make API Request better",
+    "title": "Make API Request Better",
     "welcome": "Welcome to"
   },
   "infra_tokens": {
@@ -2377,7 +2380,7 @@
     "last_used_on": "Last used on",
     "no_expiration": "No expiration",
     "no_expiration_verbose": "This token will never expire!",
-    "section_description": "Manage your apirequest users through APIs with Infra tokens",
+    "section_description": "Manage your API Request users through APIs with Infra tokens",
     "section_title": "Infra Tokens",
     "tab_title": "Infra Tokens",
     "token_expires_on": "This token will expire on",
@@ -2489,7 +2492,7 @@
     "name": "Name",
     "new_user_added": "New User Added",
     "no_invite": "No pending invites found",
-    "no_invite_description": "No pending invites! Start inviting your teammates to apirequest",
+    "no_invite_description": "No pending invites! Start inviting your teammates to API Request",
     "no_shared_requests": "No shared requests created by the user",
     "no_users": "No users found",
     "not_available": "Not Available",
@@ -2515,15 +2518,15 @@
     "create_an_organization": "Create an organization",
     "deactivate_user_failure": "User deactivation failed!!",
     "deactivate_user_success": "User deactivated successfully!!",
-    "delete_account_description": "This will delete all data associated with your apirequest account, including this and any other organizations you are part of.",
-    "delete_account": "Delete apirequest Account",
+    "delete_account_description": "This will delete all data associated with your API Request account, including this and any other organizations you are part of.",
+    "delete_account": "Delete API Request Account",
     "user_deletion_failed_sole_admin": "The user is the sole admin of one or more organization instances. Please demote the user before attempting deletion.",
     "user_deletion_failed_sole_team_owner": "The user is the sole team owner on one or more organization instances. Please transfer the ownership or delete the relevant workspaces before attempting deletion.",
     "no_organizations": "You are not a member of any organizations",
     "admin": "Admin"
   },
   "organization_sidebar": {
-    "apirequest_cloud": "apirequest Cloud",
+    "apirequest_cloud": "API Request Cloud",
     "cloud_locked": "Default instance cannot be removed",
     "admin": "Admin",
     "error_loading": "Failed to load organizations",
@@ -2651,7 +2654,7 @@
     "folders": "folders",
     "open_documentation": "Edit and publish documentation",
     "mock_description": "Create example-based Mock endpoints with delays, access controls and request logs.",
-    "mock_login": "Sign in to manage personal Mock servers.",
+    "mock_login": "Could not connect to the local workbench. Please retry.",
     "recent_reports": "Recent reports",
     "no_reports": "Completed runs will appear here. Reports are saved on this device.",
     "export_report": "Export report",
@@ -2792,7 +2795,6 @@
     "retention_days": "Keep for (days)",
     "save_file": "Save a copy",
     "save_policy_first": "Save the cleanup settings before previewing.",
-    "save_results": "Save response results",
     "saved_files": "Saved files",
     "view": "View result"
   },
@@ -3320,5 +3322,13 @@
     "text_message": "Text",
     "binary_message": "Binary · Base64",
     "headers_error": "Enter a JSON object with string values"
+  },
+  "history": {
+    "record_requests": "Record history",
+    "record_description": "Save complete requests and responses when enabled. Turning this off stops new entries and keeps existing history.",
+    "record_failed": "Could not update history recording. Please retry.",
+    "disabled": "History is off. Use the switch above to enable it.",
+    "load_failed": "Could not load history",
+    "load_failed_description": "Check your connection and retry. Existing records are kept."
   }
 }

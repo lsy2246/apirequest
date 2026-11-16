@@ -1,16 +1,16 @@
-import { HoppRESTResponse } from "@helpers/types/HoppRESTResponse";
-import { copyToClipboard } from "@helpers/utils/clipboard";
-import { refAutoReset } from "@vueuse/core";
-import { computed, ComputedRef, ref, Ref, watch } from "vue";
+import { HoppRESTResponse } from "@helpers/types/HoppRESTResponse"
+import { useClipboard } from "./clipboard"
+import { refAutoReset } from "@vueuse/core"
+import { computed, ComputedRef, ref, Ref, watch } from "vue"
 
-import jsonToLanguage from "~/helpers/utils/json-to-language";
-import { platform } from "~/platform";
-import IconCheck from "~icons/lucide/check";
-import IconCopy from "~icons/lucide/copy";
-import IconDownload from "~icons/lucide/download";
-import { useI18n } from "./i18n";
-import { useToast } from "./toast";
-import { HoppRESTRequestResponse } from "@apirequest/data";
+import jsonToLanguage from "~/helpers/utils/json-to-language"
+import { platform } from "~/platform"
+import IconCheck from "~icons/lucide/check"
+import IconCopy from "~icons/lucide/copy"
+import IconDownload from "~icons/lucide/download"
+import { useI18n } from "./i18n"
+import { useToast } from "./toast"
+import { HoppRESTRequestResponse } from "@apirequest/data"
 
 export function useCopyInterface(responseBodyText: Ref<string>) {
   const toast = useToast()
@@ -18,14 +18,14 @@ export function useCopyInterface(responseBodyText: Ref<string>) {
 
   const copyInterfaceIcon = refAutoReset(IconCopy, 1000)
 
+  const { copy } = useClipboard()
   const copyInterface = async (targetLanguage: string) => {
-    jsonToLanguage(targetLanguage, responseBodyText.value).then((res) => {
-      copyToClipboard(res.lines.join("\n"))
-      copyInterfaceIcon.value = IconCheck
-      toast.success(
-        t("state.copied_interface_to_clipboard", { language: targetLanguage })
-      )
-    })
+    try {
+      const res = await jsonToLanguage(targetLanguage, responseBodyText.value)
+      if (await copy(res.lines.join("\n"))) copyInterfaceIcon.value = IconCheck
+    } catch {
+      toast.error(t("error.copy_failed"))
+    }
   }
 
   return {
@@ -35,15 +35,11 @@ export function useCopyInterface(responseBodyText: Ref<string>) {
 }
 
 export function useCopyResponse(responseBodyText: Ref<any>) {
-  const toast = useToast()
-  const t = useI18n()
-
   const copyIcon = refAutoReset(IconCopy, 1000)
 
-  const copyResponse = () => {
-    copyToClipboard(responseBodyText.value)
-    copyIcon.value = IconCheck
-    toast.success(`${t("state.copied_to_clipboard")}`)
+  const { copy } = useClipboard()
+  const copyResponse = async () => {
+    if (await copy(responseBodyText.value)) copyIcon.value = IconCheck
   }
 
   return {

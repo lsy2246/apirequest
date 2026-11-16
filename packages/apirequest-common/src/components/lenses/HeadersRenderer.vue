@@ -28,18 +28,16 @@
 </template>
 
 <script setup lang="ts">
-import IconCopy from "~icons/lucide/copy";
-import IconCheck from "~icons/lucide/check";
-import { refAutoReset } from "@vueuse/core";
-import { copyToClipboard } from "~/helpers/utils/clipboard";
-import { useI18n } from "@composables/i18n";
-import { useToast } from "@composables/toast";
-import type { HoppRESTResponseHeader } from "~/helpers/types/HoppRESTResponse";
-import { useVModel } from "@vueuse/core";
+import IconCopy from "~icons/lucide/copy"
+import IconCheck from "~icons/lucide/check"
+import { refAutoReset } from "@vueuse/core"
+import { useClipboard } from "~/composables/clipboard"
+import { useI18n } from "@composables/i18n"
+import type { HoppRESTResponseHeader } from "~/helpers/types/HoppRESTResponse"
+import { useVModel } from "@vueuse/core"
 
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
-
-const toast = useToast()
 
 const props = defineProps<{
   modelValue: HoppRESTResponseHeader[]
@@ -57,10 +55,9 @@ const copyIcon = refAutoReset<typeof IconCopy | typeof IconCheck>(
   1000
 )
 
-const copyHeaders = () => {
-  copyToClipboard(JSON.stringify(props.modelValue))
+const copyHeaders = async () => {
+  if (!(await copyToClipboard(JSON.stringify(props.modelValue)))) return
   copyIcon.value = IconCheck
-  toast.success(`${t("state.copied_to_clipboard")}`)
 }
 
 const deleteHeader = (index: number) => {

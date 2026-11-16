@@ -92,12 +92,35 @@ describe('workspace infrastructure configuration', () => {
       E.left(INFRA_CONFIG_NOT_FOUND),
     );
   });
-  it('reads the history recording policy from its configured key', async () => {
-    const config = record(InfraConfigEnum.USER_HISTORY_STORE_ENABLED, 'true');
-    prisma.infraConfig.findUniqueOrThrow.mockResolvedValue(config);
-    expect(await service.isUserHistoryEnabled()).toEqual(E.right(config));
-    expect(prisma.infraConfig.findUniqueOrThrow).toHaveBeenCalledWith({
+  it.each([
+    ['true', 'ENABLE'],
+    ['false', 'DISABLE'],
+    ['ENABLE', 'ENABLE'],
+    ['DISABLE', 'DISABLE'],
+  ])(
+    'reads the history policy %s as %s without rewriting it',
+    async (stored, expected) => {
+      const config = record(InfraConfigEnum.USER_HISTORY_STORE_ENABLED, stored);
+      prisma.infraConfig.findUniqueOrThrow.mockResolvedValue(config);
+      expect(await service.isUserHistoryEnabled()).toEqual(
+        E.right({ ...config, value: expected }),
+      );
+      expect(prisma.infraConfig.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { name: InfraConfigEnum.USER_HISTORY_STORE_ENABLED },
+      });
+      expect(prisma.infraConfig.update).not.toHaveBeenCalled();
+    },
+  );
+  it('enables recording only when explicitly requested', async () => {
+    await service.enableHistory();
+    expect(prisma.infraConfig.upsert).toHaveBeenCalledWith({
       where: { name: InfraConfigEnum.USER_HISTORY_STORE_ENABLED },
+      create: {
+        name: InfraConfigEnum.USER_HISTORY_STORE_ENABLED,
+        value: 'ENABLE',
+        isEncrypted: false,
+      },
+      update: { value: 'ENABLE', isEncrypted: false },
     });
   });
   it('closes the shared configuration connection at shutdown', async () => {

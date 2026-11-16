@@ -65,28 +65,29 @@
 </template>
 
 <script setup lang="ts">
-import IconPlay from "~icons/lucide/play";
-import IconStop from "~icons/lucide/stop-circle";
-import IconTrash2 from "~icons/lucide/trash-2";
-import IconCopy from "~icons/lucide/copy";
-import IconCheck from "~icons/lucide/check";
-import IconInfo from "~icons/lucide/info";
-import IconWand from "~icons/lucide/wand";
-import IconWrapText from "~icons/lucide/wrap-text";
-import { computed, reactive, ref } from "vue";
-import jsonLinter from "~/helpers/editor/linting/json";
-import { copyToClipboard } from "@helpers/utils/clipboard";
-import { useCodemirror } from "@composables/codemirror";
-import * as gql from "graphql";
-import { useI18n } from "@composables/i18n";
-import { refAutoReset, useVModel } from "@vueuse/core";
-import { useToast } from "~/composables/toast";
-import { getPlatformSpecialKey as getSpecialKey } from "~/helpers/platformutils";
-import type { SubscriptionState } from "~/services/gql-tab-connection.service";
-import type { AggregateEnvironment } from "~/newstore/environments";
-import { useNestedSetting } from "~/composables/settings";
-import { toggleNestedSetting } from "~/newstore/settings";
+import IconPlay from "~icons/lucide/play"
+import IconStop from "~icons/lucide/stop-circle"
+import IconTrash2 from "~icons/lucide/trash-2"
+import IconCopy from "~icons/lucide/copy"
+import IconCheck from "~icons/lucide/check"
+import IconInfo from "~icons/lucide/info"
+import IconWand from "~icons/lucide/wand"
+import IconWrapText from "~icons/lucide/wrap-text"
+import { computed, reactive, ref } from "vue"
+import jsonLinter from "~/helpers/editor/linting/json"
+import { useClipboard } from "~/composables/clipboard"
+import { useCodemirror } from "@composables/codemirror"
+import * as gql from "graphql"
+import { useI18n } from "@composables/i18n"
+import { refAutoReset, useVModel } from "@vueuse/core"
+import { useToast } from "~/composables/toast"
+import { getPlatformSpecialKey as getSpecialKey } from "~/helpers/platformutils"
+import type { SubscriptionState } from "~/services/gql-tab-connection.service"
+import type { AggregateEnvironment } from "~/newstore/environments"
+import { useNestedSetting } from "~/composables/settings"
+import { toggleNestedSetting } from "~/newstore/settings"
 
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
 const toast = useToast()
 
@@ -141,10 +142,9 @@ useCodemirror(
   })
 )
 
-const copyVariables = () => {
-  copyToClipboard(variableString.value)
+const copyVariables = async () => {
+  if (!(await copyToClipboard(variableString.value))) return
   copyVariablesIcon.value = IconCheck
-  toast.success(`${t("state.copied_to_clipboard")}`)
 }
 
 const prettifyVariableString = () => {

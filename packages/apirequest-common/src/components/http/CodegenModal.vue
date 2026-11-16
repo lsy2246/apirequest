@@ -28,16 +28,16 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@composables/i18n";
-import { useToast } from "@composables/toast";
-import { refAutoReset } from "@vueuse/core";
-import { ref, watch } from "vue";
-import { copyToClipboard } from "~/helpers/utils/clipboard";
+import { useI18n } from "@composables/i18n"
+import { refAutoReset } from "@vueuse/core"
+import { ref, watch } from "vue"
+import { useClipboard } from "~/composables/clipboard"
 
-import { platform } from "~/platform";
-import IconCheck from "~icons/lucide/check";
-import IconCopy from "~icons/lucide/copy";
+import { platform } from "~/platform"
+import IconCheck from "~icons/lucide/check"
+import IconCopy from "~icons/lucide/copy"
 
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
 
 const props = defineProps<{
@@ -48,8 +48,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "hide-modal"): void
 }>()
-
-const toast = useToast()
 
 const copyCodeIcon = refAutoReset<typeof IconCopy | typeof IconCheck>(
   IconCopy,
@@ -71,9 +69,8 @@ watch(
 
 const hideModal = () => emit("hide-modal")
 
-const copyRequestCode = () => {
-  copyToClipboard(requestCode.value)
+const copyRequestCode = async () => {
+  if (!(await copyToClipboard(requestCode.value))) return
   copyCodeIcon.value = IconCheck
-  toast.success(`${t("state.copied_to_clipboard")}`)
 }
 </script>

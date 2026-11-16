@@ -41,23 +41,24 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
-import { refAutoReset } from "@vueuse/core";
-import { useCodemirror } from "@composables/codemirror";
-import { useI18n } from "@composables/i18n";
-import { useColorMode } from "@composables/theming";
-import { useToast } from "@composables/toast";
-import { copyToClipboard } from "@helpers/utils/clipboard";
-import { useService } from "dioc/vue";
-import IconCheck from "~icons/lucide/check";
-import IconCopy from "~icons/lucide/copy";
-import IconDownload from "~icons/lucide/download";
-import IconWrapText from "~icons/lucide/wrap-text";
-import { useNestedSetting } from "~/composables/settings";
-import { toggleNestedSetting } from "~/newstore/settings";
-import { platform } from "~/platform";
-import { GQLTabConnectionService } from "~/services/gql-tab-connection.service";
+import { reactive, ref } from "vue"
+import { refAutoReset } from "@vueuse/core"
+import { useCodemirror } from "@composables/codemirror"
+import { useI18n } from "@composables/i18n"
+import { useColorMode } from "@composables/theming"
+import { useToast } from "@composables/toast"
+import { useClipboard } from "~/composables/clipboard"
+import { useService } from "dioc/vue"
+import IconCheck from "~icons/lucide/check"
+import IconCopy from "~icons/lucide/copy"
+import IconDownload from "~icons/lucide/download"
+import IconWrapText from "~icons/lucide/wrap-text"
+import { useNestedSetting } from "~/composables/settings"
+import { toggleNestedSetting } from "~/newstore/settings"
+import { platform } from "~/platform"
+import { GQLTabConnectionService } from "~/services/gql-tab-connection.service"
 
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
 const toast = useToast()
 const colorMode = useColorMode()
@@ -112,10 +113,10 @@ const downloadSchema = async () => {
   }
 }
 
-const copySchema = () => {
+const copySchema = async () => {
   if (!schemaString.value) return
 
-  copyToClipboard(schemaString.value)
+  if (!(await copyToClipboard(schemaString.value))) return
   copySchemaIcon.value = IconCheck
 }
 </script>

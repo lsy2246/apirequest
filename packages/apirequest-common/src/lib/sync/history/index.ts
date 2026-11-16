@@ -1,15 +1,42 @@
-import { ReqType } from "~/helpers/backend/enums";
-import { hasErrorFetchingHistoryStoreStatus, isFetchingHistoryStoreStatus, isHistoryStoreEnabled } from "./status";
-import { restHistoryStore, RESTHistoryEntry, setRESTHistoryEntries, addRESTHistoryEntry, toggleRESTHistoryEntryStar, deleteRESTHistoryEntry, clearRESTHistory, setGraphqlHistoryEntries, GQLHistoryEntry, addGraphqlHistoryEntry, toggleGraphqlHistoryEntryStar, graphqlHistoryStore, deleteGraphqlHistoryEntry, clearGraphqlHistory, decodeGQLHistoryResponse } from "~/newstore/history";
-import { parseRESTRequest, parseGQLRequest } from "@apirequest/data";
-import { HistoryPlatformDef } from "~/platform/history";
-import { getUserHistoryEntries, runUserHistoryAllDeletedSubscription, runUserHistoryCreatedSubscription, runUserHistoryDeletedManySubscription, runUserHistoryDeletedSubscription, runUserHistoryUpdatedSubscription } from "./api";
+import { ReqType } from "~/helpers/backend/enums"
+import {
+  hasErrorFetchingHistoryStoreStatus,
+  isFetchingHistoryStoreStatus,
+  isHistoryStoreEnabled,
+} from "./status"
+import {
+  restHistoryStore,
+  RESTHistoryEntry,
+  setRESTHistoryEntries,
+  addRESTHistoryEntry,
+  toggleRESTHistoryEntryStar,
+  deleteRESTHistoryEntry,
+  clearRESTHistory,
+  setGraphqlHistoryEntries,
+  GQLHistoryEntry,
+  addGraphqlHistoryEntry,
+  toggleGraphqlHistoryEntryStar,
+  graphqlHistoryStore,
+  deleteGraphqlHistoryEntry,
+  clearGraphqlHistory,
+  decodeGQLHistoryResponse,
+} from "~/newstore/history"
+import { parseRESTRequest, parseGQLRequest } from "@apirequest/data"
+import { HistoryPlatformDef } from "~/platform/history"
+import {
+  getUserHistoryEntries,
+  runUserHistoryAllDeletedSubscription,
+  runUserHistoryCreatedSubscription,
+  runUserHistoryDeletedManySubscription,
+  runUserHistoryDeletedSubscription,
+  runUserHistoryUpdatedSubscription,
+} from "./api"
 
-import * as E from "fp-ts/Either";
-import { restHistorySyncer, gqlHistorySyncer } from "./sync";
-import { runDispatchWithOutSyncing } from "..";
+import * as E from "fp-ts/Either"
+import { restHistorySyncer, gqlHistorySyncer } from "./sync"
+import { runDispatchWithOutSyncing } from ".."
 
-import { platform } from "~/platform";
+import { platform } from "~/platform"
 
 function initHistorySync() {
   const authEvents$ = platform.auth.getAuthEventsStream()
@@ -20,13 +47,7 @@ function initHistorySync() {
 
   gqlHistorySyncer.startStoreSync()
 
-  currentUser$.subscribe(async (user) => {
-    getUserHistoryStatus()
-
-    if (user) {
-      await loadHistoryEntries()
-    }
-  })
+  currentUser$.subscribe(() => void refreshHistory())
 
   authEvents$.subscribe((event) => {
     if (event.event == "login" || event.event == "token_refresh") {
@@ -109,8 +130,10 @@ function mergeHistoryEntries<
   return merged
 }
 
-async function loadHistoryEntries() {
+async function loadHistoryEntries(revision: number) {
   const res = await getUserHistoryEntries()
+  if (revision !== refreshRevision) return
+  if (E.isLeft(res)) throw new Error("History could not be loaded")
 
   if (E.isRight(res)) {
     const restEntries = res.right.me.RESTHistory ?? []
@@ -147,30 +170,27 @@ async function loadHistoryEntries() {
   }
 }
 
-async function getUserHistoryStatus() {
-  const currentUser = platform.auth.getCurrentUser()
+let refreshRevision = 0
 
-  if (!currentUser) {
-    isHistoryStoreEnabled.value = true
-    return
-  }
-
-  // The history-enabled toggle is a self-host infra-config concept. Backends
-  // without it (e.g. cloud) omit this hook and history is always enabled.
-  const getHistoryStoreStatus = platform.sync?.history?.getHistoryStoreStatus
-  if (!getHistoryStoreStatus) {
-    isHistoryStoreEnabled.value = true
-    return
-  }
-
+export async function refreshHistory() {
+  const revision = ++refreshRevision
   isFetchingHistoryStoreStatus.value = true
-
+  hasErrorFetchingHistoryStoreStatus.value = false
+  const currentUser = platform.auth.getCurrentUser()
+  const getHistoryStoreStatus = platform.sync?.history?.getHistoryStoreStatus
   try {
-    isHistoryStoreEnabled.value = await getHistoryStoreStatus()
+    const enabled =
+      currentUser && getHistoryStoreStatus
+        ? await getHistoryStoreStatus()
+        : true
+    if (revision !== refreshRevision) return
+    isHistoryStoreEnabled.value = enabled
+    if (currentUser && enabled) await loadHistoryEntries(revision)
   } catch {
-    hasErrorFetchingHistoryStoreStatus.value = true
+    if (revision === refreshRevision)
+      hasErrorFetchingHistoryStoreStatus.value = true
   } finally {
-    isFetchingHistoryStoreStatus.value = false
+    if (revision === refreshRevision) isFetchingHistoryStoreStatus.value = false
   }
 }
 
@@ -319,6 +339,7 @@ function setupUserHistoryStoreStatusChangedSubscription() {
 
   return subscribeToHistoryStoreStatus((enabled) => {
     isHistoryStoreEnabled.value = enabled
+    if (enabled) void refreshHistory()
   })
 }
 

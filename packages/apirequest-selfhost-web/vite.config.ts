@@ -245,6 +245,11 @@ export default defineConfig({
           customCollections: ["hopp", "auth", "brands"],
         }),
         (compName: string) => {
+          if (["HoppButtonPrimary", "HoppButtonSecondary"].includes(compName))
+            return {
+              name: compName,
+              from: path.resolve(__dirname, "../apirequest-common/src/helpers/ui-buttons"),
+            }
           if (compName.startsWith("Hopp"))
             return { name: compName, from: "@apirequest/ui" }
           else return undefined

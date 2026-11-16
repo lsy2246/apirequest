@@ -464,9 +464,11 @@
                 class="mock-field mt-1 w-full"
               />
             </label>
-            <WorkbenchToggle class="flex items-center gap-2" v-model="rule.enabled">{{
-              t("state.enabled")
-            }}</WorkbenchToggle>
+            <WorkbenchToggle
+              v-model="rule.enabled"
+              class="flex items-center gap-2"
+              >{{ t("state.enabled") }}</WorkbenchToggle
+            >
             <details>
               <summary class="cursor-pointer font-medium">
                 {{ t("mock_rule.conditions") }}
@@ -502,21 +504,12 @@
                             : 'X-Mock-Case'
                     "
                   />
-                  <select
-                    :value="condition.operator || 'equals'"
-                    :aria-label="t('mock_tools.operator')"
-                    class="mock-field"
-                    @change="
-                      setOperator(
-                        condition,
-                        ($event.target as HTMLSelectElement).value
-                      )
-                    "
-                  >
-                    <option v-for="op in operators" :key="op" :value="op">
-                      {{ t(`mock_tools.${op}`) }}
-                    </option>
-                  </select>
+                  <RuleSelect
+                    :model-value="condition.operator || 'equals'"
+                    :options="operatorOptions"
+                    :label="t('mock_tools.operator')"
+                    @update:model-value="setOperator(condition, $event)"
+                  />
                   <input
                     v-if="
                       !['exists', 'absent', 'json_schema'].includes(
@@ -581,44 +574,30 @@
               <div class="mt-3 space-y-3">
                 <label class="block"
                   >{{ t("mock_tools.secure")
-                  }}<select
-                    :value="
+                  }}<RuleSelect
+                    :model-value="
                       rule.secure == null
                         ? 'any'
                         : rule.secure
                           ? 'https'
                           : 'http'
                     "
-                    class="mock-field mt-1 w-full"
-                    @change="
-                      rule.secure =
-                        ($event.target as HTMLSelectElement).value === 'any'
-                          ? null
-                          : ($event.target as HTMLSelectElement).value ===
-                            'https'
+                    :options="protocolOptions"
+                    :label="t('mock_tools.secure')"
+                    class="mt-1 w-full"
+                    @update:model-value="
+                      rule.secure = $event === 'any' ? null : $event === 'https'
                     "
-                  >
-                    <option value="any">
-                      {{ t("mock_tools.any_protocol") }}
-                    </option>
-                    <option value="http">HTTP</option>
-                    <option value="https">HTTPS</option>
-                  </select></label
-                >
+                /></label>
                 <label class="block"
                   >{{ t("mock_tools.path_mode")
-                  }}<select
-                    v-model="rule.pathMode"
-                    class="mock-field mt-1 w-full"
-                  >
-                    <option value="template">
-                      {{ t("mock_tools.template_path") }}
-                    </option>
-                    <option value="exact">{{ t("mock_tools.exact") }}</option>
-                    <option value="glob">{{ t("mock_tools.glob") }}</option>
-                    <option value="regex">{{ t("mock_tools.regex") }}</option>
-                  </select></label
-                >
+                  }}<RuleSelect
+                    :model-value="rule.pathMode || 'template'"
+                    :options="pathModeOptions"
+                    :label="t('mock_tools.path_mode')"
+                    class="mt-1 w-full"
+                    @update:model-value="rule.pathMode = $event"
+                /></label>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label
                     >{{ t("mock_tools.priority")
@@ -826,8 +805,8 @@
                 </label>
                 <WorkbenchToggle
                   v-if="step.action === 'sse' || step.action === 'websocket'"
-                  class="flex items-center gap-2"
                   v-model="step.disconnectAfter"
+                  class="flex items-center gap-2"
                   >{{ t("mock_rule.disconnect_after") }}</WorkbenchToggle
                 >
                 <label
@@ -925,9 +904,11 @@
                   <summary class="cursor-pointer">
                     {{ t("mock_tools.template") }}
                   </summary>
-                  <WorkbenchToggle class="my-2 flex gap-2" v-model="step.template">{{
-                    t("mock_tools.template")
-                  }}</WorkbenchToggle>
+                  <WorkbenchToggle
+                    v-model="step.template"
+                    class="my-2 flex gap-2"
+                    >{{ t("mock_tools.template") }}</WorkbenchToggle
+                  >
                   <template v-if="step.template"
                     ><p class="text-tiny text-secondaryLight">
                       {{ t("mock_tools.template_hint") }}
@@ -984,7 +965,9 @@
                 v-if="rule.steps.length === 1"
                 class="flex items-center gap-2"
                 :on="rule.exhausted === 'fallthrough'"
-                @change="rule.exhausted = $event ? 'fallthrough' : 'repeat_last'"
+                @change="
+                  rule.exhausted = $event ? 'fallthrough' : 'repeat_last'
+                "
                 >{{ t("mock_rule.limit_hits") }}</WorkbenchToggle
               >
               <label v-else class="flex flex-wrap items-center gap-2">
@@ -1111,7 +1094,7 @@ import IconBraces from "~icons/lucide/braces"
 import IconRadio from "~icons/lucide/radio"
 import IconFile from "~icons/lucide/file"
 import IconUnplug from "~icons/lucide/unplug"
-import { copyToClipboard } from "~/helpers/utils/clipboard"
+import { useClipboard } from "~/composables/clipboard"
 import ForwardFields from "./ForwardFields.vue"
 import WebSocketFields from "./WebSocketFields.vue"
 import ScriptFields from "./ScriptFields.vue"
@@ -1142,6 +1125,7 @@ import IconLogs from "~icons/lucide/list"
 import IconTrash from "~icons/lucide/trash-2"
 import IconReset from "~icons/lucide/rotate-ccw"
 
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
 const emit = defineEmits<{ "server-ids": [string[]] }>()
 const methods = [
@@ -1159,6 +1143,23 @@ const methodOptions = methods.map((value) => ({
   label: value,
   color: getMethodLabelColor(value),
 }))
+const operatorOptions = computed(() =>
+  operators.map((value) => ({ value, label: t(`mock_tools.${value}`) }))
+)
+const protocolOptions = computed(() => [
+  { value: "any", label: t("mock_tools.any_protocol") },
+  { value: "http", label: "HTTP" },
+  { value: "https", label: "HTTPS" },
+])
+const pathModeOptions = computed(
+  () =>
+    [
+      { value: "template", label: t("mock_tools.template_path") },
+      { value: "exact", label: t("mock_tools.exact") },
+      { value: "glob", label: t("mock_tools.glob") },
+      { value: "regex", label: t("mock_tools.regex") },
+    ] as const
+)
 const conditionOptions = computed(
   () =>
     [
@@ -1635,14 +1636,12 @@ function deleteItem() {
     await loadEntries()
   })
 }
-function copyURL(server: RuleServer, rule?: MockRulePreview) {
-  void run(async () => {
-    await copyToClipboard(
-      (rule?.steps[0]?.action === "websocket"
-        ? server.url.replace(/^http/, "ws")
-        : server.url) + (rule?.path || "")
-    )
-  })
+async function copyURL(server: RuleServer, rule?: MockRulePreview) {
+  await copyToClipboard(
+    (rule?.steps[0]?.action === "websocket"
+      ? server.url.replace(/^http/, "ws")
+      : server.url) + (rule?.path || "")
+  )
 }
 function newDraft(name = ""): Draft {
   return {

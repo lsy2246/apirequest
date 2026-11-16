@@ -115,42 +115,47 @@
 </template>
 
 <script setup lang="ts">
-import MarkdownIt from "markdown-it";
-import DOMPurify from "dompurify";
-import { computed, ref, type Component } from "vue";
-import { useI18n } from "~/composables/i18n";
-import { copyToClipboard } from "~/helpers/utils/clipboard";
-import { parseStepLines, type StepKind, type StepTone } from "~/helpers/aichat/step-lines";
-import type { ChatMessage } from "~/services/ai-chat.service";
+import MarkdownIt from "markdown-it"
+import DOMPurify from "dompurify"
+import { computed, type Component } from "vue"
+import { useI18n } from "~/composables/i18n"
+import { useClipboard } from "~/composables/clipboard"
+import {
+  parseStepLines,
+  type StepKind,
+  type StepTone,
+} from "~/helpers/aichat/step-lines"
+import type { ChatMessage } from "~/services/ai-chat.service"
 
-import IconArrowLeftRight from "~icons/lucide/arrow-left-right";
-import IconBan from "~icons/lucide/ban";
-import IconBookOpen from "~icons/lucide/book-open";
-import IconCheck from "~icons/lucide/check";
-import IconCircleCheck from "~icons/lucide/circle-check";
-import IconCircleX from "~icons/lucide/circle-x";
-import IconClock from "~icons/lucide/clock";
-import IconCopy from "~icons/lucide/copy";
-import IconCornerDownRight from "~icons/lucide/corner-down-right";
-import IconFileText from "~icons/lucide/file-text";
-import IconFlaskConical from "~icons/lucide/flask-conical";
-import IconFolder from "~icons/lucide/folder";
-import IconGlobe from "~icons/lucide/globe";
-import IconHouse from "~icons/lucide/house";
-import IconLibrary from "~icons/lucide/library";
-import IconLoaderCircle from "~icons/lucide/loader-circle";
-import IconPanelsTopLeft from "~icons/lucide/panels-top-left";
-import IconPencil from "~icons/lucide/pencil";
-import IconPlug from "~icons/lucide/plug";
-import IconSave from "~icons/lucide/save";
-import IconSlidersHorizontal from "~icons/lucide/sliders-horizontal";
-import IconSparkles from "~icons/lucide/sparkles";
-import IconTrash2 from "~icons/lucide/trash-2";
-import IconTriangleAlert from "~icons/lucide/triangle-alert";
-import IconUsers from "~icons/lucide/users";
-import IconWrench from "~icons/lucide/wrench";
-import IconX from "~icons/lucide/x";
+import IconArrowLeftRight from "~icons/lucide/arrow-left-right"
+import IconBan from "~icons/lucide/ban"
+import IconBookOpen from "~icons/lucide/book-open"
+import IconCheck from "~icons/lucide/check"
+import IconCircleCheck from "~icons/lucide/circle-check"
+import IconCircleX from "~icons/lucide/circle-x"
+import IconClock from "~icons/lucide/clock"
+import IconCopy from "~icons/lucide/copy"
+import IconCornerDownRight from "~icons/lucide/corner-down-right"
+import IconFileText from "~icons/lucide/file-text"
+import IconFlaskConical from "~icons/lucide/flask-conical"
+import IconFolder from "~icons/lucide/folder"
+import IconGlobe from "~icons/lucide/globe"
+import IconHouse from "~icons/lucide/house"
+import IconLibrary from "~icons/lucide/library"
+import IconLoaderCircle from "~icons/lucide/loader-circle"
+import IconPanelsTopLeft from "~icons/lucide/panels-top-left"
+import IconPencil from "~icons/lucide/pencil"
+import IconPlug from "~icons/lucide/plug"
+import IconSave from "~icons/lucide/save"
+import IconSlidersHorizontal from "~icons/lucide/sliders-horizontal"
+import IconSparkles from "~icons/lucide/sparkles"
+import IconTrash2 from "~icons/lucide/trash-2"
+import IconTriangleAlert from "~icons/lucide/triangle-alert"
+import IconUsers from "~icons/lucide/users"
+import IconWrench from "~icons/lucide/wrench"
+import IconX from "~icons/lucide/x"
 
+const { copy: copyToClipboard, copied } = useClipboard()
 const props = defineProps<{
   message: ChatMessage
 }>()
@@ -284,17 +289,7 @@ const thoughtDuration = computed(() => {
     : `${Math.round(ms / 1000)}s`
 })
 
-const copied = ref(false)
-let copyTimer: ReturnType<typeof setTimeout> | null = null
-
-const copy = () => {
-  copyToClipboard(props.message.content)
-  copied.value = true
-  if (copyTimer) clearTimeout(copyTimer)
-  copyTimer = setTimeout(() => {
-    copied.value = false
-  }, 1500)
-}
+const copy = () => copyToClipboard(props.message.content)
 </script>
 
 <style>

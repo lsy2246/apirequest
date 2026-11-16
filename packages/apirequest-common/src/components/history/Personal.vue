@@ -55,8 +55,32 @@
         </div>
       </div>
     </div>
+    <WorkbenchState
+      v-if="isFetchingHistoryStoreStatus || loadingPage"
+      kind="loading"
+      :title="t('state.loading')"
+    />
+    <WorkbenchState
+      v-else-if="hasErrorFetchingHistoryStoreStatus || pageError"
+      kind="error"
+      :title="t('history.load_failed')"
+      :description="t('history.load_failed_description')"
+    >
+      <HoppButtonSecondary
+        :label="t('action.retry')"
+        outline
+        @click="retryHistory"
+      />
+    </WorkbenchState>
+    <p
+      v-else-if="!isHistoryStoreEnabled"
+      role="status"
+      class="p-4 text-secondaryLight"
+    >
+      {{ t("history.disabled") }}
+    </p>
     <div
-      v-if="isHistoryStoreEnabled && !isFetchingHistoryStoreStatus"
+      v-if="!isFetchingHistoryStoreStatus && history.length > 0"
       class="flex flex-col"
     >
       <details
@@ -127,29 +151,30 @@
         </div>
       </details>
     </div>
-    <HoppSmartPlaceholder
-      v-if="!isHistoryStoreEnabled && !isFetchingHistoryStoreStatus"
-      :src="`/images/states/${colorMode.value}/time.svg`"
-      :alt="`${t('empty.history')}`"
-      :text="t('settings.history_disabled')"
+    <WorkbenchState
+      v-if="
+        isHistoryStoreEnabled &&
+        !isFetchingHistoryStoreStatus &&
+        !loadingPage &&
+        !pageError &&
+        !hasErrorFetchingHistoryStoreStatus &&
+        history.length === 0
+      "
+      :title="t('empty.history')"
     />
-    <HoppSmartPlaceholder
-      v-else-if="history.length === 0 && !loadingPage"
-      :src="`/images/states/${colorMode.value}/time.svg`"
-      :alt="`${t('empty.history')}`"
-      :text="t('empty.history')"
-    />
-    <HoppSmartPlaceholder
+    <WorkbenchState
       v-else-if="
-        Object.keys(filteredHistoryGroups).length === 0 ||
+        !isFetchingHistoryStoreStatus &&
+        !loadingPage &&
+        !pageError &&
+        !hasErrorFetchingHistoryStoreStatus &&
+        history.length > 0 &&
         filteredHistory.length === 0
       "
-      :text="`${t('state.nothing_found')} ‟${filterText || filterSelection}”`"
+      :title="`${t('state.nothing_found')} ‟${filterText || filterSelection}”`"
+      :icon="IconSearch"
     >
-      <template #icon>
-        <icon-lucide-search class="svg-icons opacity-75" />
-      </template>
-      <template #body>
+      <template #default>
         <HoppButtonSecondary
           :label="t('action.clear')"
           outline
@@ -161,7 +186,7 @@
           "
         />
       </template>
-    </HoppSmartPlaceholder>
+    </WorkbenchState>
     <div
       v-if="platform.localDesktop && (hasNextPage || currentPage > 0)"
       class="flex items-center justify-center gap-3 p-3"
@@ -196,34 +221,59 @@
 </template>
 
 <script setup lang="ts">
-import { toRaw } from "vue";
-import IconFilter from "~icons/lucide/filter";
-import IconTrash from "~icons/lucide/trash";
-import IconTrash2 from "~icons/lucide/trash-2";
-import { isHistoryStoreEnabled, isFetchingHistoryStoreStatus } from "~/lib/sync/history/status";
-import HistoryGraphqlMergedCard from "./graphql/MergedCard.vue";
-import HistoryRestCard from "./rest/Card.vue";
-import HistoryResultDialog from "./ResultDialog.vue";
-import { useI18n } from "@composables/i18n";
-import { useReadonlyStream } from "@composables/stream";
-import { useColorMode } from "@composables/theming";
-import { useToast } from "@composables/toast";
-import { HoppGQLRequest, HoppRESTRequest, makeGQLRequest } from "@apirequest/data";
-import { useTimeAgo, watchDebounced } from "@vueuse/core";
-import { combineLatest, map } from "rxjs";
-import * as A from "fp-ts/Array";
-import { pipe } from "fp-ts/function";
-import { escapeRegExp, filter, groupBy, isEqual } from "lodash-es";
-import { computed, ref, Ref, watch } from "vue";
-import { useRouter } from "vue-router";
-import { clearGraphqlHistory, clearRESTHistory, deleteGraphqlHistoryEntry, deleteRESTHistoryEntry, GQLHistoryEntry, graphqlHistory$, restHistory$, RESTHistoryEntry, toggleGraphqlHistoryEntryStar, toggleRESTHistoryEntryStar } from "~/newstore/history";
+import { toRaw } from "vue"
+import { refreshWebHistory } from "~/helpers/refresh-history"
+import WorkbenchState from "~/components/workbench/State.vue"
+import IconSearch from "~icons/lucide/search"
+import IconFilter from "~icons/lucide/filter"
+import IconTrash from "~icons/lucide/trash"
+import IconTrash2 from "~icons/lucide/trash-2"
+import {
+  isHistoryStoreEnabled,
+  isFetchingHistoryStoreStatus,
+  hasErrorFetchingHistoryStoreStatus,
+} from "~/lib/sync/history/status"
+import HistoryGraphqlMergedCard from "./graphql/MergedCard.vue"
+import HistoryRestCard from "./rest/Card.vue"
+import HistoryResultDialog from "./ResultDialog.vue"
+import { useI18n } from "@composables/i18n"
+import { useReadonlyStream } from "@composables/stream"
+import { useToast } from "@composables/toast"
+import {
+  HoppGQLRequest,
+  HoppRESTRequest,
+  makeGQLRequest,
+} from "@apirequest/data"
+import { useTimeAgo, watchDebounced } from "@vueuse/core"
+import { combineLatest, map } from "rxjs"
+import * as A from "fp-ts/Array"
+import { pipe } from "fp-ts/function"
+import { escapeRegExp, filter, groupBy, isEqual } from "lodash-es"
+import { computed, ref, Ref, watch } from "vue"
+import { useRouter } from "vue-router"
+import {
+  clearGraphqlHistory,
+  clearRESTHistory,
+  deleteGraphqlHistoryEntry,
+  deleteRESTHistoryEntry,
+  GQLHistoryEntry,
+  graphqlHistory$,
+  restHistory$,
+  RESTHistoryEntry,
+  toggleGraphqlHistoryEntryStar,
+  toggleRESTHistoryEntryStar,
+} from "~/newstore/history"
 
-import { useService } from "dioc/vue";
-import { defineActionHandler, invokeAction } from "~/helpers/actions";
-import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
-import { isRESTRequest } from "~/helpers/request-type";
-import { platform } from "~/platform";
-import { nativeHistoryRevision, queryNativeHistory, type HistoryCursor } from "~/lib/sync/history/native";
+import { useService } from "dioc/vue"
+import { defineActionHandler, invokeAction } from "~/helpers/actions"
+import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
+import { isRESTRequest } from "~/helpers/request-type"
+import { platform } from "~/platform"
+import {
+  nativeHistoryRevision,
+  queryNativeHistory,
+  type HistoryCursor,
+} from "~/lib/sync/history/native"
 
 type HistoryEntry = GQLHistoryEntry | RESTHistoryEntry
 
@@ -234,7 +284,6 @@ type TimedHistoryEntry = {
 
 const toast = useToast()
 const t = useI18n()
-const colorMode = useColorMode()
 
 const filterText = ref("")
 const showMore = ref(false)
@@ -318,11 +367,13 @@ const currentPage = computed(() => cursors.value.length - 1)
 const nextCursor = ref<HistoryCursor | null>(null)
 const hasNextPage = computed(() => nextCursor.value !== null)
 const loadingPage = ref(false)
+const pageError = ref(false)
 let pageRequest = 0
 
 async function loadPage() {
   const request = ++pageRequest
   loadingPage.value = true
+  pageError.value = false
   try {
     const page = await queryNativeHistory({
       protocol: null,
@@ -339,10 +390,16 @@ async function loadPage() {
     pageEntries.value = page.entries
     nextCursor.value = page.next
   } catch {
-    if (request === pageRequest) toast.error(t("error.something_went_wrong"))
+    if (request === pageRequest) pageError.value = true
   } finally {
     if (request === pageRequest) loadingPage.value = false
   }
+}
+
+async function retryHistory() {
+  if (import.meta.env.VITE_WORKBENCH_NATIVE || platform.localDesktop)
+    return loadPage()
+  return refreshWebHistory?.()
 }
 
 function goBack() {

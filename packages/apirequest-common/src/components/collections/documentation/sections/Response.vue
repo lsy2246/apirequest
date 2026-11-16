@@ -130,12 +130,13 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, watch } from "vue";
-import IconCopy from "~icons/lucide/copy";
-import { useToast } from "~/composables/toast";
-import { getStatusCodeReasonPhrase } from "~/helpers/utils/statusCodes";
-import { useI18n } from "~/composables/i18n";
+import { useClipboard } from "~/composables/clipboard"
+import { computed, ref, watch } from "vue"
+import IconCopy from "~icons/lucide/copy"
+import { getStatusCodeReasonPhrase } from "~/helpers/utils/statusCodes"
+import { useI18n } from "~/composables/i18n"
 
+const { copy: copyText } = useClipboard()
 const t = useI18n()
 
 interface ResponseExample {
@@ -150,7 +151,6 @@ const props = defineProps<{
   responseExamples?: ResponseExample[] | null
 }>()
 
-const toast = useToast()
 const selectedResponseTab = ref<string>("response-0")
 const selectedContentTabs = ref<Record<number, string>>({})
 
@@ -234,13 +234,6 @@ function formatJSON(jsonString: string): string {
  * @param example Response example to copy
  */
 async function copyResponseExample(example: ResponseExample): Promise<void> {
-  try {
-    const responseText = example.body || ""
-    await navigator.clipboard.writeText(responseText)
-    toast.success(t("documentation.response.example_copied"))
-  } catch (err) {
-    console.error("Failed to copy response example: ", err)
-    toast.error(t("documentation.response.example_copy_failed"))
-  }
+  await copyText(example.body || "")
 }
 </script>

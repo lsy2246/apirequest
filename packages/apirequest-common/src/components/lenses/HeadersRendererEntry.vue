@@ -49,18 +49,16 @@
 </template>
 
 <script setup lang="ts">
-import IconCopy from "~icons/lucide/copy";
-import IconTrash from "~icons/lucide/trash";
-import IconCheck from "~icons/lucide/check";
-import { refAutoReset } from "@vueuse/core";
-import { copyToClipboard } from "~/helpers/utils/clipboard";
-import { useI18n } from "@composables/i18n";
-import { useToast } from "@composables/toast";
-import { computed } from "vue";
+import IconCopy from "~icons/lucide/copy"
+import IconTrash from "~icons/lucide/trash"
+import IconCheck from "~icons/lucide/check"
+import { refAutoReset } from "@vueuse/core"
+import { useClipboard } from "~/composables/clipboard"
+import { useI18n } from "@composables/i18n"
+import { computed } from "vue"
 
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
-
-const toast = useToast()
 
 const props = defineProps<{
   headerKey: string
@@ -85,10 +83,9 @@ const copyIcon = refAutoReset<typeof IconCopy | typeof IconCheck>(
   1000
 )
 
-const copyHeader = (headerValue: string) => {
-  copyToClipboard(headerValue)
+const copyHeader = async (headerValue: string) => {
+  if (!(await copyToClipboard(headerValue))) return
   copyIcon.value = IconCheck
-  toast.success(`${t("state.copied_to_clipboard")}`)
 }
 
 const deleteHeader = (headerKey: string) => {

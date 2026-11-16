@@ -34,6 +34,7 @@ export type WorkbenchNavigationPreference = {
 export type SettingsDef = {
   syncCollections: boolean
   syncHistory: boolean
+  RECORD_HISTORY: boolean
   syncEnvironments: boolean
 
   WRAP_LINES: {
@@ -92,6 +93,7 @@ export const getDefaultSettings = (): SettingsDef => {
   return {
     syncCollections: true,
     syncHistory: true,
+    RECORD_HISTORY: true,
     syncEnvironments: true,
 
     WRAP_LINES: {

@@ -117,36 +117,52 @@
 </template>
 
 <script lang="ts" setup>
-import { Environment, HoppCollectionVariable, HoppRESTRequest, makeRESTRequest } from "@apirequest/data";
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import { useIntersectionObserver } from "@vueuse/core";
-import { CodegenDefinitions, CodegenLang, CodegenName, generateCode } from "~/helpers/new-codegen";
-import IconCheck from "~icons/lucide/check";
-import IconCopy from "~icons/lucide/copy";
-import { useI18n } from "~/composables/i18n";
-import * as O from "fp-ts/Option";
-import { useToast } from "~/composables/toast";
-import { useService } from "dioc/vue";
-import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties";
-import { getEffectiveRESTRequest, resolvesEnvsInBody } from "~/helpers/utils/EffectiveURL";
-import { AggregateEnvironment, getCurrentEnvironment } from "~/newstore/environments";
-import { CurrentValueService } from "~/services/current-environment-value.service";
-import hljs from "highlight.js/lib/core";
-import javascript from "highlight.js/lib/languages/javascript";
-import python from "highlight.js/lib/languages/python";
-import php from "highlight.js/lib/languages/php";
-import go from "highlight.js/lib/languages/go";
-import ruby from "highlight.js/lib/languages/ruby";
-import java from "highlight.js/lib/languages/java";
-import csharp from "highlight.js/lib/languages/csharp";
-import powershell from "highlight.js/lib/languages/powershell";
-import http from "highlight.js/lib/languages/http";
-import r from "highlight.js/lib/languages/r";
-import rust from "highlight.js/lib/languages/rust";
-import swift from "highlight.js/lib/languages/swift";
-import kotlin from "highlight.js/lib/languages/kotlin";
-import clojure from "highlight.js/lib/languages/clojure";
-import hljsCurl from "highlightjs-curl";
+import { useClipboard } from "~/composables/clipboard"
+import {
+  Environment,
+  HoppCollectionVariable,
+  HoppRESTRequest,
+  makeRESTRequest,
+} from "@apirequest/data"
+import { ref, computed, onMounted, onUnmounted, watch } from "vue"
+import { useIntersectionObserver } from "@vueuse/core"
+import {
+  CodegenDefinitions,
+  CodegenLang,
+  CodegenName,
+  generateCode,
+} from "~/helpers/new-codegen"
+import IconCheck from "~icons/lucide/check"
+import IconCopy from "~icons/lucide/copy"
+import { useI18n } from "~/composables/i18n"
+import * as O from "fp-ts/Option"
+import { useService } from "dioc/vue"
+import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties"
+import {
+  getEffectiveRESTRequest,
+  resolvesEnvsInBody,
+} from "~/helpers/utils/EffectiveURL"
+import {
+  AggregateEnvironment,
+  getCurrentEnvironment,
+} from "~/newstore/environments"
+import { CurrentValueService } from "~/services/current-environment-value.service"
+import hljs from "highlight.js/lib/core"
+import javascript from "highlight.js/lib/languages/javascript"
+import python from "highlight.js/lib/languages/python"
+import php from "highlight.js/lib/languages/php"
+import go from "highlight.js/lib/languages/go"
+import ruby from "highlight.js/lib/languages/ruby"
+import java from "highlight.js/lib/languages/java"
+import csharp from "highlight.js/lib/languages/csharp"
+import powershell from "highlight.js/lib/languages/powershell"
+import http from "highlight.js/lib/languages/http"
+import r from "highlight.js/lib/languages/r"
+import rust from "highlight.js/lib/languages/rust"
+import swift from "highlight.js/lib/languages/swift"
+import kotlin from "highlight.js/lib/languages/kotlin"
+import clojure from "highlight.js/lib/languages/clojure"
+import hljsCurl from "highlightjs-curl"
 
 // Import highlight.js CSS for base styling
 import "highlight.js/styles/github-dark.css"
@@ -181,8 +197,8 @@ const initializeHighlightJS = (() => {
   }
 })()
 
+const { copy: copyText, copied: curlCopied } = useClipboard()
 const t = useI18n()
-const toast = useToast()
 
 const props = withDefaults(
   defineProps<{
@@ -207,7 +223,6 @@ const props = withDefaults(
 
 const curlCodeContainer = ref<HTMLElement | null>(null)
 const curlViewContainer = ref<HTMLElement | null>(null)
-const curlCopied = ref<boolean>(false)
 const codegenType = ref<CodegenName>("shell-curl")
 const codegenMode = ref<CodegenLang>("shell")
 const isVisible = ref(false)
@@ -478,19 +493,7 @@ watch([codegenType, codegenMode], () => {
   }
 })
 
-const copyCurlCommand = async () => {
-  if (!curlCommand.value) return
-  try {
-    await navigator.clipboard.writeText(curlCommand.value)
-    curlCopied.value = true
-    setTimeout(() => {
-      curlCopied.value = false
-    }, 2000)
-    toast.success(t("documentation.curl.copied"))
-  } catch (err) {
-    console.error("Failed to copy cURL command: ", err)
-  }
-}
+const copyCurlCommand = () => copyText(curlCommand.value)
 
 // Initialize highlight.js once
 onMounted(() => {

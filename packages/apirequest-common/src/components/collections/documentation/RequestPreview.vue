@@ -122,24 +122,39 @@
 </template>
 
 <script lang="ts" setup>
-import { Environment, HoppCollectionVariable, HoppGQLRequest, HoppRESTRequest, isGQLRequest, makeRESTRequest } from "@apirequest/data";
-import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties";
-import { ref, computed, watch } from "vue";
-import { useRouter } from "vue-router";
-import IconCopy from "~icons/lucide/copy";
-import IconExternalLink from "~icons/lucide/external-link";
-import IconGraphql from "~icons/hopp/graphql";
-import { useToast } from "~/composables/toast";
-import { useService } from "dioc/vue";
-import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
-import { DocumentationService } from "~/services/documentation.service";
-import { cascadeParentCollectionForProperties } from "~/newstore/collections";
-import { cloneDeep } from "lodash-es";
-import { getEffectiveRESTRequest } from "~/helpers/utils/EffectiveURL";
-import { filterNonEmptyEnvironmentVariables, transformRequestVariablesToAggregateEnv } from "~/helpers/utils/environments";
-import { AggregateEnvironment, getCurrentEnvironment } from "~/newstore/environments";
-import { CurrentValueService } from "~/services/current-environment-value.service";
-import { useI18n } from "~/composables/i18n";
+import { useClipboard } from "~/composables/clipboard"
+import {
+  Environment,
+  HoppCollectionVariable,
+  HoppGQLRequest,
+  HoppRESTRequest,
+  isGQLRequest,
+  makeRESTRequest,
+} from "@apirequest/data"
+import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties"
+import { ref, computed, watch } from "vue"
+import { useRouter } from "vue-router"
+import IconCopy from "~icons/lucide/copy"
+import IconExternalLink from "~icons/lucide/external-link"
+import IconGraphql from "~icons/hopp/graphql"
+import { useToast } from "~/composables/toast"
+import { useService } from "dioc/vue"
+import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
+import { DocumentationService } from "~/services/documentation.service"
+import { cascadeParentCollectionForProperties } from "~/newstore/collections"
+import { cloneDeep } from "lodash-es"
+import { getEffectiveRESTRequest } from "~/helpers/utils/EffectiveURL"
+import {
+  filterNonEmptyEnvironmentVariables,
+  transformRequestVariablesToAggregateEnv,
+} from "~/helpers/utils/environments"
+import {
+  AggregateEnvironment,
+  getCurrentEnvironment,
+} from "~/newstore/environments"
+import { CurrentValueService } from "~/services/current-environment-value.service"
+import { useI18n } from "~/composables/i18n"
+const { copy: copyText } = useClipboard()
 const t = useI18n()
 const toast = useToast()
 const router = useRouter()
@@ -343,7 +358,6 @@ function handleBlur(): void {
   const hasChanged = editableContent.value !== props.documentationDescription
   // Store changes in documentation service if request ID exists and content changed
   if (hasChanged && requestId.value && props.request) {
-    const isTeamRequest = !!props.teamID && props.requestID
     if (
       props.folderPath !== null &&
       props.folderPath !== undefined &&
@@ -425,14 +439,8 @@ watch(
   },
   { immediate: true, deep: true }
 )
-const copyToClipboard = async (text: string | undefined) => {
-  if (!text) return
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.success(t("documentation.copied_to_clipboard"))
-  } catch (err) {
-    console.error("Failed to copy text: ", err)
-  }
+const copyToClipboard = (text: string | undefined) => {
+  if (text !== undefined) return copyText(text)
 }
 const openInNewTab = () => {
   if (props.embedded) {
@@ -441,8 +449,6 @@ const openInNewTab = () => {
   }
   if (props.request) {
     let saveContext = null
-    // Determine if this is a team collection or user collection
-    const isTeamCollection = props.teamID && props.folderPath
     if (props.folderPath !== null && props.requestIndex !== null) {
       saveContext = {
         originLocation: "user-collection" as const,

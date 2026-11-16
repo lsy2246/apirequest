@@ -95,20 +95,21 @@
 </template>
 
 <script setup lang="ts">
-import { WorkspaceType } from "~/helpers/backend/enums";
-import { ref, computed, watch } from "vue";
-import { useI18n } from "~/composables/i18n";
-import { useToast } from "~/composables/toast";
-import { platform } from "~/platform";
+import { WorkspaceType } from "~/helpers/backend/enums"
+import { ref, computed, watch } from "vue"
+import { useI18n } from "~/composables/i18n"
+import { platform } from "~/platform"
 
-import IconTrash2 from "~icons/lucide/trash-2";
+import IconTrash2 from "~icons/lucide/trash-2"
 
-import type { CreatePublishedDocsArgs, UpdatePublishedDocsArgs } from "~/helpers/backend/graphql";
-import { useClipboard } from "@vueuse/core";
-import { CURRENT_VERSION_TAG } from "~/services/documentation.service";
+import type {
+  CreatePublishedDocsArgs,
+  UpdatePublishedDocsArgs,
+} from "~/helpers/backend/graphql"
+import { useClipboard } from "~/composables/clipboard"
+import { CURRENT_VERSION_TAG } from "~/services/documentation.service"
 
 const t = useI18n()
-const toast = useToast()
 
 const props = defineProps<{
   show: boolean
@@ -262,8 +263,7 @@ const handleUpdate = () => {
 
 const copyUrl = () => {
   if (publishedUrl.value) {
-    copy(publishedUrl.value)
-    toast.success(t("documentation.publish.url_copied"))
+    void copy(publishedUrl.value)
   }
 }
 

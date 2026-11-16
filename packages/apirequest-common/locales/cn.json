@@ -135,22 +135,22 @@
     "copy_interface_type": "复制接口类型",
     "copy_user_id": "复制认证 Token",
     "developer_option": "开发者选项",
-    "developer_option_description": "开发者工具，有助于开发和维护 apirequest。",
+    "developer_option_description": "开发者工具，有助于开发和维护 API Request。",
     "discord": "Discord",
     "documentation": "帮助文档",
     "github": "GitHub",
     "help": "帮助与反馈",
     "home": "主页",
     "invite": "邀请",
-    "invite_description": "apirequest 是一个开源的 API 开发生态系统。我们设计了简单而直观的界面来创建和管理您的 API。apirequest 是一个帮助您构建、测试、记录与分享您的 API 的工具。",
+    "invite_description": "API Request 是本地 API 工作台，支持 HTTP、GraphQL、WebSocket、Mock、自动化测试、接口文档和流量抓包。",
     "invite_your_friends": "邀请您的伙伴",
     "join_discord_community": "加入我们的 Discord 社区",
     "keyboard_shortcuts": "键盘快捷键",
     "name": "API Request",
     "new_version_found": "已发现新版本。刷新页面以更新。",
-    "open_in_apirequest": "在 apirequest 中打开",
+    "open_in_apirequest": "在 API Request 中打开",
     "options": "选项",
-    "powered_by": "由 apirequest 提供支持",
+    "powered_by": "由 API Request 提供支持",
     "proxy_privacy_policy": "代理隐私政策",
     "reload": "重新加载",
     "search": "搜索",
@@ -165,7 +165,7 @@
     "twitter": "Twitter",
     "type_a_command_search": "输入命令或搜索内容……",
     "we_use_cookies": "我们使用 cookies",
-    "updated_text": "apirequest 已更新至 v{version} 🎉",
+    "updated_text": "API Request 已更新至 v{version} 🎉",
     "whats_new": "新增内容",
     "see_whats_new": "查看更新内容",
     "wiki": "帮助",
@@ -176,7 +176,7 @@
     "open_navigation": "打开导航",
     "read_documentation": "阅读文档",
     "default": "默认: {value}",
-    "star_on_github": "在 GitHub 上为 apirequest 点星",
+    "star_on_github": "在 GitHub 上为 API Request 点星",
     "github_star": "点星",
     "terms_of_service": "服务条款"
   },
@@ -194,7 +194,7 @@
     "logged_out": "已退出登录",
     "login": "登录",
     "login_success": "登录成功",
-    "login_to_apirequest": "登录 apirequest",
+    "login_to_apirequest": "登录 API Request",
     "logout": "退出",
     "re_enter_email": "重新输入电子邮箱",
     "send_magic_link": "发送魔术链接",
@@ -203,17 +203,17 @@
     "we_sent_magic_link_description": "请检查您的收件箱 - 我们向 {email} 发送了一封邮件，其中包含了能够让您登录的魔术链接。",
     "desktop": {
       "continue_in_browser": "请在浏览器中继续",
-      "browser_opened": "已在浏览器中打开 apirequest，请继续完成登录。",
+      "browser_opened": "已在浏览器中打开 API Request，请继续完成登录。",
       "open_again": "重新打开",
       "login_error_description": "处理登录时发生错误…",
       "login_complete": "登录完成",
       "login_complete_description": "你已登录桌面应用，可以关闭此浏览器窗口。",
       "login_error": "登录失败",
       "retry_on_same_device": "登录桌面应用时发生错误。请确认桌面应用已在同一设备上打开，然后重试。",
-      "login_title": "登录 apirequest 桌面版",
+      "login_title": "登录 API Request 桌面版",
       "login_to_continue": "请先登录以继续。",
       "confirm_login": "确认桌面版登录",
-      "confirm_login_description": "确定要在 apirequest 桌面版中登录你的账号吗？"
+      "confirm_login_description": "确定要在 API Request 桌面版中登录你的账号吗？"
     }
   },
   "authorization": {
@@ -265,7 +265,8 @@
       "auth_request": "授权请求",
       "token_request": "令牌请求",
       "refresh_request": "刷新请求",
-      "send_in": "发送"
+      "send_in": "发送",
+      "refresh_token_failed": "刷新访问令牌失败，请重试。"
     },
     "pass_key_by": "传递方式",
     "pass_by_query_params_label": "请求参数",
@@ -281,7 +282,7 @@
     "type": "授权类型",
     "username": "用户名",
     "advance_config": "高级配置",
-    "advance_config_description": "如果没有提供明确的值，apirequest 会自动为某些字段分配默认值",
+    "advance_config_description": "如果没有提供明确的值，API Request 会自动为某些字段分配默认值",
     "algorithm": "算法",
     "payload": "负载",
     "secret": "密钥",
@@ -373,7 +374,8 @@
     "select_location": "选择位置",
     "sorted": "集合排序",
     "details": "详情",
-    "duplicated": "集合已复制"
+    "duplicated": "集合已复制",
+    "import": "导入集合"
   },
   "confirm": {
     "close_unsaved_tab": "您确定要关闭此标签页吗？",
@@ -507,7 +509,7 @@
     "error_rendering_markdown": "渲染 Markdown 时出错：",
     "fetching_documentation": "正在获取文档...",
     "generate": "生成文档",
-    "generate_message": "导入 apirequest 集合以随时随地生成 API 文档。",
+    "generate_message": "导入 API Request 集合以随时随地生成 API 文档。",
     "headers": {
       "no_headers": "未定义头部",
       "title": "头部"
@@ -641,7 +643,7 @@
     "request_variables": "这个请求没有任何请求变量",
     "schema": "连接至 GraphQL 端点",
     "search_environment": "未找到匹配的环境",
-    "secret_environments": "密钥不会被 apirequest 同步",
+    "secret_environments": "密钥不会被 API Request 同步",
     "shared_requests": "共享请求为空",
     "shared_requests_logout": "登录并查看您的共享请求或创建一个新的共享请求",
     "subscription": "订阅为空",
@@ -734,12 +736,13 @@
     },
     "abort": {
       "heading": "请求已中止",
-      "description": "操作已取消。{message}: {cause}"
+      "description": "操作已取消。{message}"
     },
     "unknown": {
       "heading": "未知错误",
       "description": "发生未知错误。",
-      "cause": "未知原因"
+      "cause": "未知原因",
+      "phase": "未知阶段"
     },
     "extension": {
       "heading": "扩展错误",
@@ -788,7 +791,8 @@
     "generate_access_token": "生成访问令牌时出错",
     "delete_access_token": "删除访问令牌时出错",
     "extension_not_found": "未找到扩展",
-    "invalid_request": "无效的请求数据"
+    "invalid_request": "无效的请求数据",
+    "copy_failed": "复制失败，请重试。"
   },
   "export": {
     "curl": "导出 cURL",
@@ -798,7 +802,7 @@
     "choose_format": "选择导出格式",
     "collection": "导出集合",
     "collections": "导出全部集合",
-    "format_apirequest": "导出为 apirequest JSON",
+    "format_apirequest": "导出为 API Request JSON",
     "format_openapi_json": "导出为 OpenAPI 3.1（JSON）",
     "format_openapi_yaml": "导出为 OpenAPI 3.1（YAML）",
     "openapi_lossy_summary": "OpenAPI 导出会丢失脚本、认证凭证、未启用的项、重复路径和重复响应状态码。",
@@ -920,18 +924,18 @@
     "collections": "导入集合",
     "curl": "导入 cURL",
     "environments_from_gist": "从 Gist 导入",
-    "environments_from_gist_description": "从 Gist 导入 apirequest 环境",
+    "environments_from_gist_description": "从 Gist 导入 API Request 环境",
     "failed": "导入失败",
     "from_file": "从文件导入",
     "from_gist": "从 Gist 导入",
     "from_gist_description": "从 Gist URL 导入",
     "from_gist_import_summary": "集合和请求将被导入。",
-    "from_apirequest_importer_summary": "所有 apirequest 功能已导入。",
+    "from_apirequest_importer_summary": "所有 API Request 功能已导入。",
     "from_insomnia": "从 Insomnia 导入",
     "from_insomnia_description": "从 Insomnia 集合中导入",
     "from_insomnia_import_summary": "集合和请求将被导入。",
-    "from_json": "从 apirequest 导入",
-    "from_json_description": "从 apirequest 集合中导入",
+    "from_json": "从 API Request 导入",
+    "from_json_description": "从 API Request 集合中导入",
     "from_my_collections": "从我的集合导入",
     "from_my_collections_description": "从我的集合文件导入",
     "from_all_collections": "从其他工作区导入",
@@ -950,14 +954,14 @@
     "from_har_description": "从 HAR 文件导入",
     "from_har_import_summary": "请求将被导入到默认集合中。",
     "gql_collections_from_gist_description": "从 Gist 导入 GraphQL 集合",
-    "apirequest_environment": "apirequest 环境",
-    "apirequest_environment_description": "导入 apirequest 环境 JSON 文件",
+    "apirequest_environment": "API Request 环境",
+    "apirequest_environment_description": "导入 API Request 环境 JSON 文件",
     "import_from_url_invalid_fetch": "无法从网址取得资料",
     "import_from_url_invalid_file_format": "导入组合时发生错误",
     "import_from_url_invalid_type": "不支持此类型。可接受的值为 'apirequest'、'openapi'、'postman'、'insomnia'",
     "import_from_url_success": "已导入组合",
     "insomnia_environment_description": "从一个 JSON/YAML 文件中导入 Insomnia 环境",
-    "json_description": "从 apirequest 的集合文件导入（JSON）",
+    "json_description": "从 API Request 的集合文件导入（JSON）",
     "postman_environment": "Postman 环境",
     "postman_environment_description": "从一个 JSON 文件中导入 Postman 环境",
     "title": "导入",
@@ -972,7 +976,6 @@
     "import_summary_not_supported_by_apirequest_import": "我们目前不支持从此来源导入 {featureLabel}。",
     "import_summary_script_found": "发现脚本但未导入",
     "import_summary_scripts_found": "发现脚本但未导入",
-    "import_summary_enable_experimental_sandbox": "要导入 Postman 脚本，请在设置中启用“实验性脚本沙盒”。注意：此功能为实验性质。",
     "cors_error_modal": {
       "title": "检测到 CORS 错误",
       "description": "由于服务器施加的 CORS（跨域资源共享）限制，导入失败。",
@@ -982,7 +985,7 @@
     }
   },
   "instances": {
-    "switch": "切换 apirequest 实例",
+    "switch": "切换 API Request 实例",
     "enter_server_url": "连接到自托管实例",
     "already_connected": "您已连接到该实例",
     "recent_connections": "最近的连接",
@@ -1034,7 +1037,7 @@
       "not_found": "环境变量“{environment}”未找到。"
     },
     "header": {
-      "cookie": "浏览器不允许 apirequest 设置 Cookie 标头。请改用授权标头，或使用支持 Cookie 的 apirequest 桌面版。"
+      "cookie": "浏览器不允许 API Request 设置 Cookie 标头。请改用授权标头，或使用支持 Cookie 的 API Request 桌面版。"
     },
     "response": {
       "401_error": "请检查您的身份验证凭据。",
@@ -1367,7 +1370,7 @@
     "save_as": "另存为",
     "saved": "请求已保存",
     "share": "分享",
-    "share_description": "分享 apirequest 给您的朋友",
+    "share_description": "分享 API Request 给您的朋友",
     "share_request": "分享请求",
     "stop": "停止",
     "switch_protocol": "切换协议",
@@ -1442,7 +1445,7 @@
     "delete_account": "刪除账号",
     "delete_account_description": "一旦您删除了您的帐号，您的所有数据将被永久删除。此操作无法复原。",
     "desktop": "桌面版",
-    "desktop_description": "更新 apirequest 桌面应用的行为、连接超时、键盘处理和显示偏好。",
+    "desktop_description": "更新 API Request 桌面应用的行为、连接超时、键盘处理和显示偏好。",
     "desktop_display": "显示",
     "desktop_keyboard": "键盘",
     "desktop_keyboard_strategy_label": "按输入字母或物理按键位置匹配快捷键",
@@ -1466,7 +1469,6 @@
     "enable_encode_mode_tooltip": "始终编码请求中的参数",
     "expand_navigation": "展开导航栏",
     "experiments": "实验功能",
-    "experiments_notice": "下面是我们正在开发中的一些实验功能，这些功能可能会很有用，可能很有趣，又或者二者都是或都不是。这些功能并非最终版本且可能不稳定，所以如果发生了一些过于奇怪的事情，不要惊慌，关掉它们就好了。玩笑归玩笑，",
     "follow": "关注我们",
     "general": "通用",
     "general_description": "应用程序中使用的通用设置",
@@ -1474,7 +1476,6 @@
     "interceptor_description": "应用程序和 API 之间的中间件。",
     "language": "语言",
     "light_mode": "亮色",
-    "official_proxy_hosting": "官方代理由 API Request 托管。",
     "query_parameters_encoding": "查询参数编码",
     "query_parameters_encoding_description": "配置请求中查询参数的编码方式",
     "profile": "个人资料",
@@ -1491,7 +1492,7 @@
     "short_codes": "快捷键",
     "short_codes_description": "我们为您打造的快捷键。",
     "sidebar_on_left": "侧边栏移至左侧",
-    "ai_experiments": "AI实验",
+    "ai_experiments": "AI 辅助功能",
     "ai_request_naming_style": "请求命名风格",
     "ai_request_naming_style_descriptive_with_spaces": "描述性带空格",
     "ai_request_naming_style_camel_case": "驼峰命名法（camelCase）",
@@ -1507,7 +1508,6 @@
     "sync_description": "这些设置会同步到云。",
     "sync_environments": "环境",
     "sync_history": "历史",
-    "history_disabled": "历史记录功能已禁用。请联系您的组织管理员以启用该功能",
     "system_mode": "系统",
     "telemetry": "遥测服务",
     "telemetry_helps_us": "遥测服务帮助我们进行个性化操作，为您提供最佳体验。",
@@ -1550,7 +1550,7 @@
     "remove_domain": "移除域名",
     "ca_certificate": "CA 证书",
     "ca_certificates": "CA 证书",
-    "ca_certificates_support": "apirequest 支持包含一个或多个证书的 .crt、.cer 或 .pem 文件。",
+    "ca_certificates_support": "API Request 支持包含一个或多个证书的 .crt、.cer 或 .pem 文件。",
     "proxy_capabilities": "桌面应用支持 HTTP/HTTPS/SOCKS 代理，以及 NTLM 和 Basic 身份认证。",
     "local_proxy_capabilities": "本地网页支持 HTTP/HTTPS/SOCKS 代理和用户名、密码认证。",
     "proxy_auth": "账号密码填写在 URL 中，例如 {url}。",
@@ -1560,12 +1560,14 @@
     "connection_timeout_seconds_default": "{seconds} 秒（默认）",
     "desktop_connection": "连接",
     "request_sending": "请求设置",
-    "request_sending_description": "配置请求使用的证书和代理。"
+    "request_sending_description": "配置请求使用的证书和代理。",
+    "access_tokens": "访问令牌",
+    "access_tokens_description": "管理供 CLI 和私有 Mock 服务使用的访问令牌。"
   },
   "shared_requests": {
     "auth_warning": "此请求包含身份验证凭据。任何拥有分享链接的人都能读取它们——包括令牌、密码和 API 密钥。",
     "button": "按钮",
-    "button_info": "为您的网站、博客或者 README 创建一个“Run in apirequest”按钮。",
+    "button_info": "为您的网站、博客或者 README 创建一个“Run in API Request”按钮。",
     "copy_html": "复制 HTML",
     "copy_link": "复制链接",
     "copy_markdown": "复制 Markdown",
@@ -1574,14 +1576,14 @@
     "deleted": "共享请求已删除",
     "description": "选择一个控件，之后您可以更改或者自定义",
     "embed": "内嵌",
-    "embed_info": "为您的网站、博客或者文档添加一个小的“apirequest API Playground”。",
+    "embed_info": "为您的网站、博客或者文档添加一个小的“API Request API Playground”。",
     "link": "链接",
     "link_info": "创建一个仅查看的分享链接给任何人",
     "modified": "共享请求与修改",
     "not_found": "未找到共享请求",
     "open_new_tab": "在新标签中打开",
     "preview": "预览",
-    "run_in_apirequest": "在 apirequest 中运行",
+    "run_in_apirequest": "在 API Request 中运行",
     "theme": {
       "dark": "深色",
       "light": "浅色",
@@ -1619,7 +1621,7 @@
       "redo": "重做"
     },
     "miscellaneous": {
-      "invite": "邀请使用 apirequest",
+      "invite": "邀请使用 API Request",
       "title": "杂项"
     },
     "navigation": {
@@ -1721,7 +1723,7 @@
       "disconnect": "与服务器断开连接"
     },
     "miscellaneous": {
-      "invite": "邀请您的朋友来 apirequest",
+      "invite": "邀请您的朋友来 API Request",
       "title": "杂项"
     },
     "request": {
@@ -1944,7 +1946,8 @@
     "users_to_admin_success": "选中用户已成功提升为管理员！",
     "users_to_admin_failure": "将选中用户提升为管理员失败！",
     "loading_workspaces": "正在加载工作区",
-    "loading_collections_in_workspace": "正在加载工作区中的集合"
+    "loading_collections_in_workspace": "正在加载工作区中的集合",
+    "copied": "已复制"
   },
   "tab": {
     "authorization": "授权",
@@ -2040,7 +2043,7 @@
     "we_sent_invite_link": "我们向所有受邀者发送了邀请链接！",
     "invite_sent_smtp_disabled": "邀请链接已生成",
     "we_sent_invite_link_description": "请所有受邀者检查他们的收件箱，点击链接以加入团队。",
-    "invite_sent_smtp_disabled_description": "发送邀请邮件在此 apirequest 实例中已禁用。请使用“复制链接”按钮手动复制并分享邀请链接。",
+    "invite_sent_smtp_disabled_description": "发送邀请邮件在此 API Request 实例中已禁用。请使用“复制链接”按钮手动复制并分享邀请链接。",
     "copy_invite_link": "复制邀请链接",
     "search_title": "团队请求",
     "user_not_found": "在此实例中未找到该用户。",
@@ -2087,13 +2090,13 @@
   },
   "site_protection": {
     "login_to_continue": "登录以继续",
-    "login_to_continue_description": "您需要登录才能访问此 apirequest 企业实例。",
+    "login_to_continue_description": "您需要登录才能访问此 API Request 企业实例。",
     "error_fetching_site_protection_status": "获取站点保护状态时出现问题"
   },
   "access_tokens": {
     "tab_title": "令牌",
     "section_title": "个人访问令牌",
-    "section_description": "个人访问令牌目前帮助您将 CLI 连接到您的 apirequest 账户",
+    "section_description": "访问令牌用于 CLI 和私有 Mock 服务访问当前工作台，请妥善保管。",
     "last_used_on": "最后使用于",
     "expires_on": "过期于",
     "no_expiration": "未过期",
@@ -2116,8 +2119,8 @@
     "execute_scripts": "执行脚本",
     "collection_id": "集合ID",
     "environment_id": "环境ID",
-    "cli_collection_id_description": "此集合 ID 将由 apirequest 的 CLI 集合运行器使用。",
-    "cli_environment_id_description": "此环境 ID 将由 apirequest 的 CLI 集合运行器使用。",
+    "cli_collection_id_description": "此集合 ID 将由 API Request 的 CLI 集合运行器使用。",
+    "cli_environment_id_description": "此环境 ID 将由 API Request 的 CLI 集合运行器使用。",
     "include_active_environment": "包含活动环境：",
     "cli": "CLI",
     "cli_comming_soon_for_personal_collection": "CLI 中的个人集合运行器即将推出。",
@@ -2265,11 +2268,11 @@
       "title": "认证提供商",
       "update_failure": "更新认证提供商配置失败！"
     },
-    "confirm_changes": "apirequest 服务器必须重启以使新更改生效。确认对服务器配置所做的更改吗？",
+    "confirm_changes": "API Request 服务器必须重启以使新更改生效。确认对服务器配置所做的更改吗？",
     "input_empty": "请在更新配置前填写所有字段",
     "data_sharing": {
       "title": "数据共享",
-      "description": "通过共享匿名数据帮助改进 apirequest",
+      "description": "通过共享匿名数据帮助改进 API Request",
       "enable": "启用数据共享",
       "secondary_title": "数据共享配置",
       "see_shared": "查看共享内容",
@@ -2295,7 +2298,7 @@
       "user": "邮件服务器用户名"
     },
     "reset": {
-      "confirm_reset": "apirequest 服务器必须重启以使更改生效。确认重置服务器配置吗？",
+      "confirm_reset": "API Request 服务器必须重启以使更改生效。确认重置服务器配置吗？",
       "description": "将加载环境文件中指定的默认配置",
       "failure": "重置配置失败！",
       "title": "重置配置",
@@ -2311,15 +2314,15 @@
     "update_failure": "更新服务器配置失败",
     "restrict_access": "限制访问",
     "site_protection": {
-      "control_access": "控制谁可以访问 apirequest 应用",
-      "description": "使用站点保护设置自定义访问者访问您的 apirequest 应用的方式。",
+      "control_access": "控制谁可以访问 API Request 应用",
+      "description": "使用站点保护设置自定义访问者访问您的 API Request 应用的方式。",
       "enable": "启用站点保护",
-      "note": "访问 apirequest 应用的用户将看到登录页面，必须登录才能使用应用。授权仍需管理员批准。",
+      "note": "访问 API Request 应用的用户将看到登录页面，必须登录才能使用应用。授权仍需管理员批准。",
       "update_failure": "更新站点保护配置失败！"
     },
     "domain_whitelisting": {
       "add_domain": "添加新域名",
-      "description": "邮箱地址在已列入白名单的域中注册的用户无需管理员明确批准即可访问 apirequest 应用",
+      "description": "邮箱地址在已列入白名单的域中注册的用户无需管理员明确批准即可访问 API Request 应用",
       "enable": "启用域名白名单",
       "enter_domain": "输入域名",
       "title": "白名单域名",
@@ -2356,11 +2359,11 @@
     }
   },
   "data_sharing": {
-    "description": "共享匿名使用数据以改进 apirequest",
+    "description": "共享匿名使用数据以改进 API Request",
     "enable": "启用数据共享",
     "see_shared": "查看共享内容",
-    "toggle_description": "共享数据，让 apirequest 变得更好",
-    "title": "让 apirequest 变得更好",
+    "toggle_description": "共享数据，让 API Request 变得更好",
+    "title": "让 API Request 变得更好",
     "welcome": "欢迎来到"
   },
   "infra_tokens": {
@@ -2377,7 +2380,7 @@
     "last_used_on": "最后使用于",
     "no_expiration": "永不过期",
     "no_expiration_verbose": "此令牌将永不过期！",
-    "section_description": "通过基础设施令牌和 API 管理您的 apirequest 用户",
+    "section_description": "通过基础设施令牌和 API 管理您的 API Request 用户",
     "section_title": "基础设施令牌",
     "tab_title": "基础设施令牌",
     "token_expires_on": "此令牌将于以下时间过期",
@@ -2489,7 +2492,7 @@
     "name": "姓名",
     "new_user_added": "已添加新用户",
     "no_invite": "未找到待处理邀请",
-    "no_invite_description": "暂无待处理邀请！开始邀请您的团队成员使用 apirequest",
+    "no_invite_description": "暂无待处理邀请！开始邀请您的团队成员使用 API Request",
     "no_shared_requests": "该用户未创建任何共享请求",
     "no_users": "未找到用户",
     "not_available": "不可用",
@@ -2515,15 +2518,15 @@
     "create_an_organization": "创建一个组织",
     "deactivate_user_failure": "用户停用失败！",
     "deactivate_user_success": "用户停用成功！",
-    "delete_account_description": "这将删除与您的 apirequest 账户关联的所有数据，包括您当前所属以及参与的任何其他组织实例。",
-    "delete_account": "删除 apirequest 账户",
+    "delete_account_description": "这将删除与您的 API Request 账户关联的所有数据，包括您当前所属以及参与的任何其他组织实例。",
+    "delete_account": "删除 API Request 账户",
     "user_deletion_failed_sole_admin": "该用户是一个或多个组织实例的唯一管理员。请在删除前先取消其管理员权限。",
     "user_deletion_failed_sole_team_owner": "该用户在一个或多个组织实例中是工作区的唯一所有者。请在删除前转移所有权或删除相关的工作区。",
     "no_organizations": "您不属于任何组织",
     "admin": "管理员"
   },
   "organization_sidebar": {
-    "apirequest_cloud": "apirequest 云",
+    "apirequest_cloud": "API Request 云",
     "cloud_locked": "默认实例无法移除",
     "admin": "管理员",
     "error_loading": "加载组织失败",
@@ -2651,7 +2654,7 @@
     "folders": "个目录",
     "open_documentation": "编辑与发布文档",
     "mock_description": "使用响应示例创建 Mock 接口，支持延迟、访问控制和请求日志。",
-    "mock_login": "登录后即可管理个人 Mock 服务。",
+    "mock_login": "暂时无法连接本地工作台，请重试。",
     "recent_reports": "历史报告",
     "no_reports": "运行完成后将在此显示，报告保存在当前设备。",
     "export_report": "导出报告",
@@ -2792,7 +2795,6 @@
     "retention_days": "保留（天）",
     "save_file": "保存文件副本",
     "save_policy_first": "请先保存清理设置，再预览。",
-    "save_results": "保存响应结果",
     "saved_files": "已保存文件",
     "view": "查看结果"
   },
@@ -3320,5 +3322,13 @@
     "text_message": "文本",
     "binary_message": "二进制 · Base64",
     "headers_error": "请输入值为字符串的 JSON 对象"
+  },
+  "history": {
+    "record_requests": "记录历史",
+    "record_description": "开启后完整保存请求和响应，关闭后停止新增记录。已有历史会保留。",
+    "record_failed": "无法更改历史记录设置，请重试。",
+    "disabled": "历史记录已关闭，可使用上方开关启用。",
+    "load_failed": "历史记录加载失败",
+    "load_failed_description": "暂时无法读取历史记录，请检查连接后重试。已有记录会保留。"
   }
 }

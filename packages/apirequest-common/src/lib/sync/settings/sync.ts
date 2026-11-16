@@ -1,21 +1,26 @@
-import { settingsStore } from "~/newstore/settings";
-import { getSyncInitFunction, StoreSyncDefinitionOf } from "..";
-import { updateUserSettings } from "./api";
+import { settingsStore } from "~/newstore/settings"
+import { getSyncInitFunction, StoreSyncDefinitionOf } from ".."
+import { updateUserSettings } from "./api"
+
+function sharedSettings() {
+  const { RECORD_HISTORY: _recordHistory, ...settings } = settingsStore.value
+  return JSON.stringify(settings)
+}
 
 export const settingsSyncDefinition: StoreSyncDefinitionOf<
   typeof settingsStore
 > = {
-  toggleSetting() {
-    updateUserSettings(JSON.stringify(settingsStore.value))
+  toggleSetting({ settingKey }) {
+    if (settingKey !== "RECORD_HISTORY") updateUserSettings(sharedSettings())
   },
   toggleNestedSetting() {
-    updateUserSettings(JSON.stringify(settingsStore.value))
+    updateUserSettings(sharedSettings())
   },
-  applySetting() {
-    updateUserSettings(JSON.stringify(settingsStore.value))
+  applySetting({ settingKey }) {
+    if (settingKey !== "RECORD_HISTORY") updateUserSettings(sharedSettings())
   },
   applyNestedSetting() {
-    updateUserSettings(JSON.stringify(settingsStore.value))
+    updateUserSettings(sharedSettings())
   },
 }
 

@@ -17,18 +17,37 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { LOCAL_WORKSPACE_UID } from '../auth/local-workspace/policy';
 import { ThrottlerBehindProxyGuard } from '../guards/throttler-behind-proxy.guard';
 import { WorkbenchHistoryResultsService } from './workbench-history-results.service';
+import { InfraConfigService } from '../infra-config/infra-config.service';
+import { PubSubService } from '../pubsub/pubsub.service';
+import { InfraConfigEnum } from '../types/InfraConfig';
+import { ServiceStatus } from '../infra-config/helper';
 
 type AuthRequest = Request & { user: { uid: string } };
 
 @Controller({ path: 'workbench-history-results', version: '1' })
 @UseGuards(ThrottlerBehindProxyGuard, JwtAuthGuard)
 export class WorkbenchHistoryResultsController {
-  constructor(private readonly results: WorkbenchHistoryResultsService) {}
+  constructor(
+    private readonly results: WorkbenchHistoryResultsService,
+    private readonly infraConfig: InfraConfigService,
+    private readonly pubsub: PubSubService,
+  ) {}
 
   private owner(request: AuthRequest) {
     if (request.user.uid !== LOCAL_WORKSPACE_UID)
       throw new ForbiddenException();
     return request.user.uid;
+  }
+
+  @Post('recording/enable')
+  async enableRecording(@Req() request: AuthRequest) {
+    this.owner(request);
+    await this.infraConfig.enableHistory();
+    await this.pubsub.publish(
+      `infra_config/${InfraConfigEnum.USER_HISTORY_STORE_ENABLED}/updated`,
+      ServiceStatus.ENABLE,
+    );
+    return { enabled: true };
   }
 
   @Get('policy')

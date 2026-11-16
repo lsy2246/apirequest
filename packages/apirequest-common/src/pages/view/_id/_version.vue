@@ -34,21 +34,30 @@
 </template>
 
 <script setup lang="ts">
-import IconAlertCircle from "~icons/lucide/alert-circle";
-import { ref, onMounted, computed, watch } from "vue";
-import { useRoute } from "vue-router";
-import { useI18n } from "~/composables/i18n";
-import { getPublishedDocBySlugREST, collectionFolderToHoppCollection } from "~/helpers/backend/queries/PublishedDocs";
-import * as E from "fp-ts/Either";
-import { Environment, HoppCollection, HoppGQLRequest, HoppRESTRequest, translateToNewEnvironmentVariables } from "@apirequest/data";
-import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties";
-import { hasActualScript } from "@apirequest/js-sandbox/scripting";
-import { PublishedDocREST } from "~/helpers/backend/queries/PublishedDocs";
+import IconAlertCircle from "~icons/lucide/alert-circle"
+import { ref, onMounted, computed, watch } from "vue"
+import { useRoute } from "vue-router"
+import { useI18n } from "~/composables/i18n"
+import {
+  getPublishedDocBySlugREST,
+  collectionFolderToHoppCollection,
+} from "~/helpers/backend/queries/PublishedDocs"
+import * as E from "fp-ts/Either"
+import {
+  Environment,
+  HoppCollection,
+  HoppGQLRequest,
+  HoppRESTRequest,
+  translateToNewEnvironmentVariables,
+} from "@apirequest/data"
+import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties"
+import { hasActualScript } from "@apirequest/js-sandbox/scripting"
+import { PublishedDocREST } from "~/helpers/backend/queries/PublishedDocs"
 
-import { getKernelMode } from "@apirequest/kernel";
-import { platform } from "~/platform";
-import { useReadonlyStream } from "~/composables/stream";
-import { usePageHead } from "~/composables/head";
+import { getKernelMode } from "@apirequest/kernel"
+import { platform } from "~/platform"
+import { useReadonlyStream } from "~/composables/stream"
+import { usePageHead } from "~/composables/head"
 
 const route = useRoute()
 const t = useI18n()
@@ -69,12 +78,12 @@ const currentState =
       )
     : ref({
         status: "disconnected" as const,
-        instance: { displayName: "apirequest" },
+        instance: { displayName: "API Request" },
       })
 
 const instanceDisplayName = computed(() => {
   if (currentState.value.status !== "connected") {
-    return "apirequest"
+    return "API Request"
   }
   return currentState.value.instance.displayName
 })
@@ -268,34 +277,32 @@ watch(
 
 usePageHead({
   title: computed(
-    () => publishedDoc.value?.title || "apirequest Documentation"
+    () => publishedDoc.value?.title || "API Request Documentation"
   ),
   meta: [
     {
       name: "description",
       content: computed(
         () =>
-          collectionData.value?.description ||
-          "apirequest API Documentation - Open source API development ecosystem"
+          collectionData.value?.description || "API Request API Documentation"
       ),
     },
     {
       property: "og:title",
       content: computed(
-        () => publishedDoc.value?.title || "apirequest Documentation"
+        () => publishedDoc.value?.title || "API Request Documentation"
       ),
     },
     {
       property: "og:description",
       content: computed(
         () =>
-          collectionData.value?.description ||
-          "apirequest API Documentation - Open source API development ecosystem"
+          collectionData.value?.description || "API Request API Documentation"
       ),
     },
     {
       property: "og:site_name",
-      content: "apirequest",
+      content: "API Request",
     },
     {
       property: "og:image",
@@ -316,15 +323,14 @@ usePageHead({
     {
       name: "twitter:title",
       content: computed(
-        () => publishedDoc.value?.title || "apirequest Documentation"
+        () => publishedDoc.value?.title || "API Request Documentation"
       ),
     },
     {
       name: "twitter:description",
       content: computed(
         () =>
-          collectionData.value?.description ||
-          "apirequest API Documentation - Open source API development ecosystem"
+          collectionData.value?.description || "API Request API Documentation"
       ),
     },
     {

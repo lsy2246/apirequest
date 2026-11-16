@@ -119,7 +119,7 @@ export async function getDefaultInfraConfigs(): Promise<DefaultInfraConfig[]> {
     },
     {
       name: InfraConfigEnum.USER_HISTORY_STORE_ENABLED,
-      value: 'true',
+      value: ServiceStatus.ENABLE,
       isEncrypted: false,
     },
     {

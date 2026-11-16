@@ -1,11 +1,15 @@
-import * as E from "fp-ts/Either";
-import { runGQLSubscription } from "~/helpers/backend/GQLClient";
-import { bulkApplySettings, getDefaultSettings } from "~/newstore/settings";
-import { platform } from "~/platform";
-import { SettingsPlatformDef } from "~/platform/settings";
-import { runDispatchWithOutSyncing } from "..";
-import { createUserSettings, getUserSettings, runUserSettingsUpdatedSubscription } from "./api";
-import { settingsSyncer } from "./sync";
+import * as E from "fp-ts/Either"
+import { runGQLSubscription } from "~/helpers/backend/GQLClient"
+import { bulkApplySettings, getDefaultSettings } from "~/newstore/settings"
+import { platform } from "~/platform"
+import { SettingsPlatformDef } from "~/platform/settings"
+import { runDispatchWithOutSyncing } from ".."
+import {
+  createUserSettings,
+  getUserSettings,
+  runUserSettingsUpdatedSubscription,
+} from "./api"
+import { settingsSyncer } from "./sync"
 
 // 首次创建设置时，订阅缓存可能暂时只含记录 ID；缺少有效 JSON 时保留设备现有配置。
 function applySyncedSettings(properties: unknown) {
@@ -14,6 +18,7 @@ function applySyncedSettings(properties: unknown) {
     const parsed = JSON.parse(properties)
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return
     // 侧栏开关属于当前浏览器的布局，保留已从本地加载的选择。
+    delete parsed.RECORD_HISTORY
     delete parsed.SIDEBAR
     // 新版脚本沙盒已常驻，旧开关无需写回同步设置。
     delete parsed.EXPERIMENTAL_SCRIPTING_SANDBOX

@@ -9,7 +9,7 @@
     <HoppSmartPlaceholder
       v-if="renderedMessages.length === 0"
       :src="`/images/states/${colorMode.value}/validation.svg`"
-      :alt="t('app.console.no_entries')"
+      :alt="t('app_console.no_entries')"
       :heading="t('app_console.no_entries')"
     >
     </HoppSmartPlaceholder>
@@ -25,9 +25,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { useI18n } from "~/composables/i18n";
-import { useColorMode } from "~/composables/theming";
+import { computed } from "vue"
+import { useI18n } from "~/composables/i18n"
+import { useColorMode } from "~/composables/theming"
 
 export type ConsoleLogLevel = "log" | "warn" | "info" | "error" | "debug"
 

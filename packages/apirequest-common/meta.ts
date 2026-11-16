@@ -2,11 +2,11 @@ import { IHTMLTag } from "vite-plugin-html-config"
 
 export const APP_INFO = {
   name: "API Request",
-  shortDescription: "开源 API 开发生态",
+  shortDescription: "本地 API 工作台",
   description:
-    "帮助你更快地创建请求，节省宝贵的开发时间。",
+    "本地调试 HTTP、GraphQL 和 WebSocket，管理 Mock、自动化测试、接口文档与流量抓包。",
   keywords:
-    "apirequest, api, request, testing, tool, rest, websocket, sse, graphql, socketio, mqtt",
+    "apirequest, api, request, testing, tool, rest, websocket, sse, graphql, mock, capture",
   app: {
     background: "#181818",
     lightThemeColor: "#ffffff",

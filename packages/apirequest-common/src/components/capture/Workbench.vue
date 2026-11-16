@@ -708,7 +708,7 @@ import { useService } from "dioc/vue"
 import { useI18n } from "~/composables/i18n"
 import { useToast } from "~/composables/toast"
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
-import { copyToClipboard } from "~/helpers/utils/clipboard"
+import { useClipboard } from "~/composables/clipboard"
 import { requestAsCurl } from "~/helpers/request-as-curl"
 import {
   captureAPI as baseCaptureAPI,
@@ -755,6 +755,7 @@ const captureAPI = <T,>(path = "", body?: object, signal?: AbortSignal) =>
         },
         signal
       )
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n(),
   toast = useToast(),
   router = useRouter(),
@@ -1229,14 +1230,7 @@ async function openRequest() {
   })
   await router.push("/")
 }
-async function copy(value: string) {
-  try {
-    await copyToClipboard(value)
-    toast.success(t("state.copied_to_clipboard"))
-  } catch {
-    toast.error(t("error.something_went_wrong"))
-  }
-}
+const copy = copyToClipboard
 async function copyCurl() {
   if (draft.value) await copy(await requestAsCurl(draft.value))
 }

@@ -1,18 +1,39 @@
-/**
- * Copies a given string to the clipboard using
- * the legacy exec method
- *
- * @param content The content to be copied
- */
-export function copyToClipboard(content: string) {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(content)
-  } else {
-    const dummy = document.createElement("textarea")
-    document.body.appendChild(dummy)
-    dummy.value = content
+import { invoke } from "@tauri-apps/api/core"
+import { platform } from "~/platform"
+
+/** Resolves only after the clipboard has actually accepted the text. */
+export async function copyToClipboard(content: string): Promise<void> {
+  if (platform?.localDesktop) {
+    await invoke("workbench_copy_text", { text: content })
+    return
+  }
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(content)
+    return
+  }
+
+  const focused = document.activeElement
+  const selection = document.getSelection()
+  const ranges = selection
+    ? Array.from({ length: selection.rangeCount }, (_, i) =>
+        selection.getRangeAt(i).cloneRange()
+      )
+    : []
+  const dummy = document.createElement("textarea")
+  dummy.value = content
+  dummy.setAttribute("readonly", "")
+  dummy.style.position = "fixed"
+  dummy.style.opacity = "0"
+  document.body.appendChild(dummy)
+  try {
     dummy.select()
-    document.execCommand("copy")
-    document.body.removeChild(dummy)
+    if (!document.execCommand("copy")) throw new Error("Clipboard unavailable")
+  } finally {
+    dummy.remove()
+    if (focused instanceof HTMLElement) focused.focus({ preventScroll: true })
+    if (selection) {
+      selection.removeAllRanges()
+      ranges.forEach((range) => selection.addRange(range))
+    }
   }
 }

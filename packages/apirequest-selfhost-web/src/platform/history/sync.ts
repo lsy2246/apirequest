@@ -36,7 +36,7 @@ export const historySyncDef: NonNullable<SyncPlatformDef["history"]> = {
       throw res.left
     }
 
-    return res.right.isUserHistoryEnabled.value === "ENABLE"
+    return ["ENABLE", "true"].includes(res.right.isUserHistoryEnabled.value)
   },
   subscribeToHistoryStoreStatus(onStatusChange) {
     const [statusChanged$, sub] = runGQLSubscription({
@@ -46,7 +46,7 @@ export const historySyncDef: NonNullable<SyncPlatformDef["history"]> = {
 
     statusChanged$.subscribe((res) => {
       if (E.isRight(res)) {
-        onStatusChange(res.right.infraConfigUpdate === "ENABLE")
+        onStatusChange(["ENABLE", "true"].includes(res.right.infraConfigUpdate))
       }
     })
 

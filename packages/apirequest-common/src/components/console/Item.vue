@@ -27,30 +27,29 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { refAutoReset } from "@vueuse/core";
+import { computed } from "vue"
+import { refAutoReset } from "@vueuse/core"
 
-import IconAlertCircle from "~icons/lucide/alert-circle";
-import IconAlertTriangle from "~icons/lucide/alert-triangle";
-import IconBug from "~icons/lucide/bug";
-import IconInfo from "~icons/lucide/info";
-import IconTerminal from "~icons/lucide/terminal";
-import IconCopy from "~icons/lucide/copy";
-import IconCheck from "~icons/lucide/check";
+import IconAlertCircle from "~icons/lucide/alert-circle"
+import IconAlertTriangle from "~icons/lucide/alert-triangle"
+import IconBug from "~icons/lucide/bug"
+import IconInfo from "~icons/lucide/info"
+import IconTerminal from "~icons/lucide/terminal"
+import IconCopy from "~icons/lucide/copy"
+import IconCheck from "~icons/lucide/check"
 
-import { ConsoleEntry, ConsoleLogLevel } from "./Panel.vue";
-import { useI18n } from "@composables/i18n";
-import { copyToClipboard } from "@helpers/utils/clipboard";
-import { useToast } from "@composables/toast";
+import { ConsoleEntry, ConsoleLogLevel } from "./Panel.vue"
+import { useI18n } from "@composables/i18n"
+import { useClipboard } from "~/composables/clipboard"
 
 type LogLevelsWithBgColor = "info" | "warn" | "error"
 
+const { copy: copyToClipboard } = useClipboard()
 const props = defineProps<{
   entry: ConsoleEntry
 }>()
 
 const t = useI18n()
-const toast = useToast()
 const copyIcon = refAutoReset(IconCopy, 1000)
 
 const bgColors: Pick<Record<ConsoleLogLevel, string>, LogLevelsWithBgColor> = {
@@ -108,12 +107,11 @@ const serializeConsoleValue = (value: unknown): string => {
   }
 }
 
-const copyEntry = () => {
+const copyEntry = async () => {
   const content = sanitizedArgs.value.map(serializeConsoleValue).join(" ")
 
-  copyToClipboard(content)
+  if (!(await copyToClipboard(content))) return
   copyIcon.value = IconCheck
-  toast.success(t("state.copied_to_clipboard"))
 }
 </script>
 

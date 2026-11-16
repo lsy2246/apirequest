@@ -54,15 +54,15 @@
 </template>
 
 <script setup lang="ts">
-import { useCodemirror } from "@composables/codemirror";
-import { useI18n } from "@composables/i18n";
-import { useNestedSetting } from "~/composables/settings";
-import { refAutoReset } from "@vueuse/core";
-import { computed, reactive, ref, watch } from "vue";
-import { stripModulePrefix } from "@apirequest/js-sandbox/scripting";
-import { copyToClipboard } from "~/helpers/utils/clipboard";
-import IconCheck from "~icons/lucide/check";
-import IconCopy from "~icons/lucide/copy";
+import { useCodemirror } from "@composables/codemirror"
+import { useI18n } from "@composables/i18n"
+import { useNestedSetting } from "~/composables/settings"
+import { refAutoReset } from "@vueuse/core"
+import { computed, reactive, ref, watch } from "vue"
+import { stripModulePrefix } from "@apirequest/js-sandbox/scripting"
+import { useClipboard } from "~/composables/clipboard"
+import IconCheck from "~icons/lucide/check"
+import IconCopy from "~icons/lucide/copy"
 
 type InheritedScript = {
   parentID: string
@@ -71,6 +71,7 @@ type InheritedScript = {
   testScript: string
 }
 
+const { copy: copyToClipboard } = useClipboard()
 const props = defineProps<{
   show: boolean
   scripts: InheritedScript[]
@@ -138,8 +139,8 @@ const copyIcon = refAutoReset<typeof IconCopy | typeof IconCheck>(
   1000
 )
 
-const copyScriptContent = (script: string) => {
-  copyToClipboard(script)
+const copyScriptContent = async (script: string) => {
+  if (!(await copyToClipboard(script))) return
   copyIcon.value = IconCheck
 }
 </script>

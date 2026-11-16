@@ -1,9 +1,16 @@
-import { isEqual } from "lodash-es";
-import { pluck } from "rxjs/operators";
-import { HoppRESTRequest, parseRESTRequest, HoppGQLRequest, parseGQLRequest } from "@apirequest/data";
-import DispatchingStore, { defineDispatchers } from "./DispatchingStore";
-import { executedResponses$ } from "~/helpers/RequestRunner";
-import { captureHistoryResult } from "~/helpers/workbench-history-results";
+import { isEqual } from "lodash-es"
+import { pluck } from "rxjs/operators"
+import {
+  HoppRESTRequest,
+  parseRESTRequest,
+  HoppGQLRequest,
+  parseGQLRequest,
+} from "@apirequest/data"
+import DispatchingStore, { defineDispatchers } from "./DispatchingStore"
+import { executedResponses$ } from "~/helpers/RequestRunner"
+import { captureHistoryResult } from "~/helpers/workbench-history-results"
+import { settingsStore } from "./settings"
+import { isHistoryStoreEnabled } from "~/lib/sync/history/status"
 
 export type RESTHistoryEntry = {
   v: number
@@ -317,6 +324,8 @@ export function removeDuplicateGraphqlHistoryEntry(id: string) {
 
 // Listen to completed responses to add to history
 executedResponses$.subscribe((res) => {
+  if (!settingsStore.value.RECORD_HISTORY || !isHistoryStoreEnabled.value)
+    return
   // Spread to auto-capture any future fields, but omit _ref_id and id
   // since history entries are snapshots and shouldn't carry collection/firestore references
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

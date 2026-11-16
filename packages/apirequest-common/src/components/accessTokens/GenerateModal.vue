@@ -131,19 +131,20 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@composables/i18n";
-import { useToast } from "@composables/toast";
-import { refAutoReset } from "@vueuse/core";
-import { VNodeRef, computed, ref } from "vue";
+import { useI18n } from "@composables/i18n"
+import { useToast } from "@composables/toast"
+import { refAutoReset } from "@vueuse/core"
+import { VNodeRef, computed, ref } from "vue"
 
-import { copyToClipboard } from "~/helpers/utils/clipboard";
-import { shortDateTime } from "~/helpers/utils/date";
+import { useClipboard } from "~/composables/clipboard"
+import { shortDateTime } from "~/helpers/utils/date"
 
-import IconCheck from "~icons/lucide/check";
-import IconCircle from "~icons/lucide/circle";
-import IconCircleDot from "~icons/lucide/circle-dot";
-import IconCopy from "~icons/lucide/copy";
+import IconCheck from "~icons/lucide/check"
+import IconCircle from "~icons/lucide/circle"
+import IconCircleDot from "~icons/lucide/circle-dot"
+import IconCopy from "~icons/lucide/copy"
 
+const { copy: copyToClipboard } = useClipboard()
 const t = useI18n()
 const toast = useToast()
 
@@ -193,16 +194,14 @@ const expirationDateText = computed(() => {
   return `${t("access_tokens.token_expires_on")} ${expirationDate}`
 })
 
-const copyAccessToken = () => {
+const copyAccessToken = async () => {
   if (!props.accessToken) {
-    toast.error("error.something_went_wrong")
+    toast.error(t("error.something_went_wrong"))
     return
   }
 
-  copyToClipboard(props.accessToken)
+  if (!(await copyToClipboard(props.accessToken))) return
   copyIcon.value = IconCheck
-
-  toast.success(`${t("state.copied_to_clipboard")}`)
 }
 
 const generateAccessToken = async () => {

@@ -37,7 +37,10 @@
           <section>
             <div class="space-y-4">
               <div v-if="hasPlatformTelemetry" class="flex items-center">
-                <WorkbenchToggle :on="TELEMETRY_ENABLED" @change="showConfirmModal">
+                <WorkbenchToggle
+                  :on="TELEMETRY_ENABLED"
+                  @change="showConfirmModal"
+                >
                   {{ t("settings.telemetry") }}
                 </WorkbenchToggle>
               </div>
@@ -72,52 +75,12 @@
                   }}</label>
                   <div class="flex flex-col space-y-4">
                     <div class="flex">
-                      <tippy
-                        interactive
-                        trigger="click"
-                        theme="popover"
-                        :on-shown="() => namingStyleTippyActions?.focus()"
-                      >
-                        <HoppSmartSelectWrapper>
-                          <HoppButtonSecondary
-                            class="flex flex-1 !justify-start rounded-none pr-8"
-                            :label="activeNamingStyle?.label"
-                            outline
-                          />
-                        </HoppSmartSelectWrapper>
-                        <template #content="{ hide }">
-                          <div
-                            ref="namingStyleTippyActions"
-                            class="flex flex-col focus:outline-none"
-                            tabindex="0"
-                            @keyup.escape="hide()"
-                          >
-                            <HoppSmartLink
-                              v-for="style in supportedNamingStyles"
-                              :key="style.id"
-                              class="flex flex-1"
-                              @click="
-                                () => {
-                                  AI_REQUEST_NAMING_STYLE = style.id
-                                  hide()
-                                }
-                              "
-                            >
-                              <HoppSmartItem
-                                :label="style.label"
-                                :active-info-icon="
-                                  AI_REQUEST_NAMING_STYLE === style.id
-                                "
-                                :info-icon="
-                                  AI_REQUEST_NAMING_STYLE === style.id
-                                    ? IconDone
-                                    : undefined
-                                "
-                              />
-                            </HoppSmartLink>
-                          </div>
-                        </template>
-                      </tippy>
+                      <WorkbenchSelect
+                        v-model="AI_REQUEST_NAMING_STYLE"
+                        :options="supportedNamingStyles"
+                        :label="t('settings.ai_request_naming_style')"
+                        class="w-full"
+                      />
                     </div>
                     <div
                       v-if="AI_REQUEST_NAMING_STYLE === 'CUSTOM'"
@@ -198,6 +161,17 @@
           <component :is="item" />
         </template>
       </template>
+      <section v-if="!platform.localDesktop" class="workbench-panel p-8">
+        <h3 class="heading">{{ t("settings.access_tokens") }}</h3>
+        <p class="my-3 text-secondaryLight">
+          {{ t("settings.access_tokens_description") }}
+        </p>
+        <HoppButtonSecondary
+          to="/access-tokens"
+          :label="t('settings.access_tokens')"
+          outline
+        />
+      </section>
       <WorkbenchDataSync v-if="isLocalWorkbench()" />
     </div>
     <HoppSmartConfirmModal
@@ -230,7 +204,7 @@ import { isLocalWorkbench, platform } from "~/platform"
 import { invokeAction } from "@helpers/actions"
 import SettingsWorkbenchNavigation from "~/components/settings/WorkbenchNavigation.vue"
 import IconKeyboard from "~icons/lucide/keyboard"
-import IconDone from "~icons/lucide/check"
+import WorkbenchSelect from "~/components/workbench/Select.vue"
 import {
   useAIExperiments,
   useAIExperimentsSupport,
@@ -253,34 +227,28 @@ const CUSTOM_NAMING_STYLE = useSetting("CUSTOM_NAMING_STYLE")
 
 const ENABLE_GQL_IN_REST_WORKSPACE = useSetting("ENABLE_GQL_IN_REST_WORKSPACE")
 
-const supportedNamingStyles = [
+const supportedNamingStyles = computed(() => [
   {
-    id: "DESCRIPTIVE_WITH_SPACES" as const,
+    value: "DESCRIPTIVE_WITH_SPACES" as const,
     label: t("settings.ai_request_naming_style_descriptive_with_spaces"),
   },
   {
-    id: "camelCase" as const,
+    value: "camelCase" as const,
     label: t("settings.ai_request_naming_style_camel_case"),
   },
   {
-    id: "snake_case" as const,
+    value: "snake_case" as const,
     label: t("settings.ai_request_naming_style_snake_case"),
   },
   {
-    id: "PascalCase" as const,
+    value: "PascalCase" as const,
     label: t("settings.ai_request_naming_style_pascal_case"),
   },
   {
-    id: "CUSTOM" as const,
+    value: "CUSTOM" as const,
     label: t("settings.ai_request_naming_style_custom"),
   },
-]
-
-const activeNamingStyle = computed(() =>
-  supportedNamingStyles.find(
-    (style) => style.id === AI_REQUEST_NAMING_STYLE.value
-  )
-)
+])
 
 const hasPlatformTelemetry = Boolean(platform.platformFeatureFlags.hasTelemetry)
 
@@ -312,6 +280,4 @@ const getColorModeName = (colorMode: string) => {
       return "settings.system_mode"
   }
 }
-
-const namingStyleTippyActions = ref<any | null>(null)
 </script>

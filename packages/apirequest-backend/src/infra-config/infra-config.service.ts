@@ -5,7 +5,12 @@ import * as E from 'fp-ts/Either';
 import { InfraConfigEnum } from 'src/types/InfraConfig';
 import { INFRA_CONFIG_NOT_FOUND } from 'src/errors';
 import { decrypt } from 'src/utils';
-import { disconnectSharedPrismaInstance, getDefaultInfraConfigs, getMissingInfraConfigEntries } from './helper';
+import {
+  disconnectSharedPrismaInstance,
+  getDefaultInfraConfigs,
+  getMissingInfraConfigEntries,
+  ServiceStatus,
+} from './helper';
 
 @Injectable()
 export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
@@ -37,6 +42,29 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
     }
   }
   async isUserHistoryEnabled() {
-    return this.get(InfraConfigEnum.USER_HISTORY_STORE_ENABLED);
+    const result = await this.get(InfraConfigEnum.USER_HISTORY_STORE_ENABLED);
+    return E.map((config: ReturnType<InfraConfigService['cast']>) => ({
+      ...config,
+      // Older local installations stored boolean strings. Normalize the wire
+      // value without changing the user's saved policy or rewriting the row.
+      value:
+        config.value === 'true'
+          ? ServiceStatus.ENABLE
+          : config.value === 'false'
+            ? ServiceStatus.DISABLE
+            : config.value,
+    }))(result);
+  }
+
+  async enableHistory() {
+    await this.prisma.infraConfig.upsert({
+      where: { name: InfraConfigEnum.USER_HISTORY_STORE_ENABLED },
+      create: {
+        name: InfraConfigEnum.USER_HISTORY_STORE_ENABLED,
+        value: ServiceStatus.ENABLE,
+        isEncrypted: false,
+      },
+      update: { value: ServiceStatus.ENABLE, isEncrypted: false },
+    });
   }
 }

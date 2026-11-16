@@ -44,7 +44,9 @@
             :on="approvalRequired"
             :disabled="busy || !loaded"
             @change="
-              approvalRequired ? (confirmDirect = true) : setApprovalPolicy(true)
+              approvalRequired
+                ? (confirmDirect = true)
+                : setApprovalPolicy(true)
             "
           >
             {{ t("workbench_mcp.require_approval") }}
@@ -79,19 +81,32 @@
             {{ t("workbench_mcp.access_notice") }}
           </p>
           <div v-if="connectionJSON" class="mt-4">
-            <div class="mb-2 flex items-center justify-between gap-3">
-              <label class="flex items-center gap-3 font-semibold">
-                {{ t("workbench_mcp.connection_config") }}
-                <select
+            <div
+              class="mb-2 flex items-start justify-between gap-3 sm:items-center"
+            >
+              <div
+                class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3"
+              >
+                <span class="font-semibold">{{
+                  t("workbench_mcp.connection_config")
+                }}</span>
+                <WorkbenchSelect
                   v-model="clientFormat"
-                  class="rounded border border-divider bg-primary px-2 py-1 font-normal"
-                >
-                  <option value="codex">Codex · TOML</option>
-                  <option value="json">MCP · JSON</option>
-                </select>
-              </label>
+                  class="w-36 shrink-0"
+                  :options="[
+                    { value: 'codex', label: 'Codex · TOML' },
+                    { value: 'json', label: 'MCP · JSON' },
+                  ]"
+                  :label="t('workbench_mcp.connection_config')"
+                />
+              </div>
               <HoppButtonSecondary
-                :label="t('action.copy')"
+                class="min-h-9 shrink-0 bg-primary hover:bg-primaryLight"
+                outline
+                :icon="copied ? IconCheck : IconCopy"
+                :label="t(copied ? 'state.copied' : 'action.copy')"
+                :disabled="copying"
+                :loading="copying"
                 @click="copyConfig"
               />
             </div>
@@ -357,18 +372,23 @@
 </template>
 <script setup lang="ts">
 import WorkbenchToggle from "~/components/workbench/Toggle.vue"
-import { provideWorkbenchLive, useWorkbenchLiveQuery } from "~/composables/workbenchLive";
-import WorkbenchPage from "~/components/workbench/Page.vue";
-import WorkbenchState from "~/components/workbench/State.vue";
-import WorkbenchSelect from "~/components/workbench/Select.vue";
-import { invoke } from "@tauri-apps/api/core";
-import { computed, onBeforeUnmount, ref } from "vue";
-import { useI18n } from "~/composables/i18n";
-import { platform } from "~/platform";
-import { copyToClipboard } from "~/helpers/utils/clipboard";
-import { workbenchMcpAPI, type McpProposal } from "~/helpers/workbench-mcp";
-import IconChevronRight from "~icons/lucide/chevron-right";
-import WorkbenchSavedPlans from "~/components/workbench/SavedPlans.vue";
+import {
+  provideWorkbenchLive,
+  useWorkbenchLiveQuery,
+} from "~/composables/workbenchLive"
+import WorkbenchPage from "~/components/workbench/Page.vue"
+import WorkbenchState from "~/components/workbench/State.vue"
+import WorkbenchSelect from "~/components/workbench/Select.vue"
+import { computed, onBeforeUnmount, ref } from "vue"
+import { useI18n } from "~/composables/i18n"
+import { platform } from "~/platform"
+import { useClipboard } from "~/composables/clipboard"
+import { workbenchMcpAPI, type McpProposal } from "~/helpers/workbench-mcp"
+import IconChevronRight from "~icons/lucide/chevron-right"
+import IconCopy from "~icons/lucide/copy"
+import IconCheck from "~icons/lucide/check"
+import WorkbenchSavedPlans from "~/components/workbench/SavedPlans.vue"
+const { copy: copyToClipboard, copied, copying } = useClipboard()
 const live = provideWorkbenchLive()
 const t = useI18n()
 const views = [
@@ -583,10 +603,7 @@ const clientConfig = computed(() => {
     ),
   ].join("\n")
 })
-const copyConfig = () =>
-  platform.localDesktop
-    ? invoke("workbench_copy_text", { text: clientConfig.value })
-    : copyToClipboard(clientConfig.value)
+const copyConfig = () => copyToClipboard(clientConfig.value)
 const liveQuery = useWorkbenchLiveQuery(["ai"], refresh, {
   context: live,
   blocked: busy,
