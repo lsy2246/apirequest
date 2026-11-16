@@ -48,7 +48,12 @@ export class MockRuleController {
       req.get('x-workbench-local') !== '1'
     )
       throw new ForbiddenException();
-    assertLocalWorkspaceRequest(req, policy);
+    // 浏览器的同源只读请求不一定发送 Origin；写操作仍要求精确来源。
+    assertLocalWorkspaceRequest(
+      req,
+      policy,
+      !['GET', 'HEAD'].includes(req.method),
+    );
     req.res?.setHeader('Cache-Control', 'no-store');
     return req.user.uid;
   }
