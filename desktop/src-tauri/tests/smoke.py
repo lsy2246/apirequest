@@ -4,7 +4,6 @@ import hashlib
 import http.server
 import json
 import os
-import sqlite3
 from pathlib import Path
 import subprocess
 import sys
@@ -148,7 +147,6 @@ def exercise_mcp(root, target, stopped):
     assert "environment-test-secret" not in json.dumps(environment)
     follow_up = [
         ("collection", "create", None, {"name": "MCP folder", "parentID": collection_id}),
-        ("mock", "create", None, {"name": "MCP mock", "collectionID": collection_id, "isPublic": False}),
         ("automation", "create", None, {"name": "MCP automation", "collectionID": collection_id, "config": {"iterations": 2}}),
         ("load_test", "create", None, {"name": "MCP load", "requestID": result_id, "config": {"mode": "requests", "requests": 20}}),
         ("websocket", "create", None, {"name": "MCP socket", "url": "ws://127.0.0.1:3188"}),
@@ -165,13 +163,13 @@ def exercise_mcp(root, target, stopped):
     for proposal, (entity, _, _, data) in zip(more, follow_up):
         saved = tool("workbench_get", {"entity": entity, "id": proposal["result"]["id"]})
         assert saved["data"]["name"] == data["name"]
-    socket_id = more[4]["result"]["id"]
+    socket_id = more[3]["result"]["id"]
     deletion = tool("workbench_propose_change", {"entity": "websocket", "operation": "delete",
         "id": socket_id, "reason": "Native smoke cleanup", "idempotencyKey": "native-smoke-delete-socket"})
     assert tool("workbench_get", {"entity": "websocket", "id": socket_id})
     wait(lambda: statuses(tool, [deletion["id"]]))
     assert tool("workbench_list", {"entity": "websocket"})["items"] == []
-    print("Native MCP: all 8 configuration domains, approvals, redaction and local documentation passed")
+    print("Native MCP: all 7 configuration domains, approvals, redaction and local documentation passed")
 
 
 def statuses(tool, ids):
@@ -181,44 +179,10 @@ def statuses(tool, ids):
     return resolved if all(proposal["status"] == "applied" for proposal in resolved) else None
 
 
-def seed_standalone_graphql(directory):
-    # 复用当前原生版本保存的数据形状，模拟用户此前在独立 GraphQL 页面中工作。
-    with sqlite3.connect(Path(directory) / "workspace.sqlite3") as connection:
-        key = ("localhost.apirequest.store", "kernel.v1", "data")
-        row = connection.execute(
-            "SELECT value FROM store_values WHERE scope=? AND namespace=? AND key=?", key
-        ).fetchone()
-        payload = json.loads(row[0])
-        state = payload["persistence.v1"]
-        draft = next(
-            entry["doc"] for entry in state["restTabs"]["data"]["orderedDocs"]
-            if entry["doc"]["type"] == "gql-request"
-        )
-        root = state["restCollections"]["data"][0]
-        collection = {
-            **root,
-            "_ref_id": "coll-standalone-smoke",
-            "name": "Standalone GraphQL smoke",
-            "folders": [],
-            "requests": [draft["request"]],
-        }
-        doc = {
-            "request": draft["request"],
-            "isDirty": True,
-            "saveContext": {"originLocation": "user-collection", "folderPath": "0", "requestIndex": 0},
-        }
-        state["gqlTabs"] = {
-            **state["restTabs"],
-            "data": {"lastActiveTabID": "smoke", "orderedDocs": [{"tabID": "smoke", "doc": doc}]},
-        }
-        state["gqlCollections"] = {**state["restCollections"], "data": [collection]}
-        connection.execute(
-            "UPDATE store_values SET value=? WHERE scope=? AND namespace=? AND key=?",
-            (json.dumps(payload), *key),
-        )
-
-
 def main():
+    # Rust 输出 UTF-8；Windows 的默认代码页不能可靠解码中文验收日志。
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     executable = Path(sys.argv[1]).resolve(strict=True)
     capture_only = "--capture-only" in sys.argv[2:]
     mock_only = "--mock-only" in sys.argv[2:]
@@ -241,8 +205,6 @@ def main():
                 client = None if capture_only or mock_only else clients.submit(exercise_mcp, Path(directory), env["APIREQUEST_NATIVE_SMOKE_TARGET"], stopped)
                 for restart in (False, True):
                     if restart:
-                        if not capture_only and not mock_only:
-                            seed_standalone_graphql(directory)
                         env["APIREQUEST_NATIVE_SMOKE_RESTART"] = "1"
                     result = subprocess.run(
                         [executable],
@@ -250,6 +212,8 @@ def main():
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         text=True,
+                        encoding="utf-8",
+                        errors="replace",
                         timeout=70,
                     )
                     print(result.stdout, end="")

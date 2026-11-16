@@ -152,7 +152,12 @@
       )
       if (!(await capture("certificate")).pem.includes("BEGIN CERTIFICATE"))
         throw new Error("Packaged capture CA is missing")
+      if (document.querySelector("main input[type=file]"))
+        throw new Error("Removed HAR import input remains")
     } finally {
+      // 抓包页的实时刷新会按需启动控制进程；先卸载页面，再验收进程重启。
+      await nav("/")
+      await until(() => document.querySelector(".collection-tree"))
       await invoke("workbench_capture", { action: "stop", body: {} })
       await until(
         async () =>
@@ -195,8 +200,6 @@
           "stopped"
       )
     }
-    if (document.querySelector("main input[type=file]"))
-      throw new Error("Removed HAR import input remains")
     if (window.__workbenchSmoke.captureOnly) {
       await invoke("workbench_smoke_finish", { passed: true })
       return
@@ -204,26 +207,17 @@
     await nav("/")
     await until(() => document.querySelector(".collection-tree"))
     if (window.__workbenchSmoke.restart) {
+      stage = "restored GraphQL draft"
       const merged = await store("restTabs")
       const restored = merged?.orderedDocs.filter(
-        ({ tabID }) => tabID === "standalone-gql:smoke"
-      )
-      const collections = await store("restCollections")
-      const roots = collections.filter(
-        ({ _ref_id }) => _ref_id === "coll-standalone-smoke"
+        ({ doc }) => doc.type === "gql-request"
       )
       if (
-        roots.length !== 1 ||
         restored?.length !== 1 ||
-        restored[0].doc.type !== "gql-request" ||
-        restored[0].doc.saveContext?.folderPath !==
-          String(collections.indexOf(roots[0])) ||
-        (await store("gqlTabs")) ||
-        (await store("gqlCollections"))
+        restored[0].doc.request.url !== new URL("/native-graphql", target).href ||
+        restored[0].doc.request.query !== "query Request { method url headers { key value } }"
       )
-        throw new Error(
-          "Standalone GraphQL data was not merged into the native workspace"
-        )
+        throw new Error("GraphQL draft was not restored from the native workspace")
     }
     if (!window.__workbenchSmoke.restart) {
       const send = await until(() => document.querySelector("#send"))
@@ -310,10 +304,17 @@
 
       stage = "settings backup"
       await nav("/settings")
-      await until(
-        () =>
-          exactText(document, "h2", "工作区备份") ||
-          exactText(document, "h2", "Workspace backup")
+      const workspaceBackup = await until(() =>
+        document.querySelector(
+          '[data-testid="data-sync"] input[name="data-transfer-kind"][value="workspace"]'
+        )
+      )
+      workspaceBackup.click()
+      const backupPanel = await until(() =>
+        document.querySelector('[data-testid="workspace-backup"]')
+      )
+      await until(() =>
+        named(backupPanel, ["导出工作区备份", "Export workspace backup"])
       )
 
       stage = "database history pagination"
@@ -387,14 +388,14 @@
       })
       stage = "approving saved plans and configuration update"
       const approvePlans = await until(() =>
-        named(document, ["Approve all (6)", "一键批准（6）"])
+        named(document, ["Approve all (5)", "一键批准（5）"])
       )
       approvePlans.click()
       await until(
         async () =>
           (await store("workbench-native-proposals"))?.filter(
             (entry) => entry.status === "applied"
-          ).length === 9
+          ).length === 8
       )
       // 已保存配置改为按类型切换，分别验收后返回待审批处理删除。
       const savedPlans = await until(() =>
@@ -404,11 +405,19 @@
       await until(() => document.body.textContent.includes("MCP automation"))
       const planKind = await until(() =>
         document.querySelector(
-          "main select[aria-label='已保存配置'], main select[aria-label='Saved configurations']"
+          "main [role='combobox'][aria-label='已保存配置'], main [role='combobox'][aria-label='Saved configurations']"
         )
       )
-      planKind.value = "load_test"
-      planKind.dispatchEvent(new Event("change", { bubbles: true }))
+      planKind.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
+      )
+      const loadTestKind = await until(() =>
+        exactText(document, '[role="option"]', "压测") ||
+        exactText(document, '[role="option"]', "Load tests")
+      )
+      loadTestKind.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+      )
       await until(() => document.body.textContent.includes("MCP load"))
       document.querySelector("main nav button").click()
       stage = "approving deletion"
@@ -420,7 +429,7 @@
         async () =>
           (await store("workbench-native-proposals"))?.filter(
             (entry) => entry.status === "applied"
-          ).length === 10
+          ).length === 9
       )
       await until(() =>
         Array.from(document.querySelectorAll("[role=status]")).some(
@@ -455,16 +464,22 @@
       await toggleFolder()
       await until(() => !collectionName(savedRequest))
       await toggleFolder()
-      const row = await until(() => collectionName(savedRequest))
+      await until(() => collectionName(savedRequest))
       stage = "persisting folder expansion after navigation"
       const collectionID = savedCollection.id ?? savedCollection._ref_id
       await until(
         async () =>
           (await store("collection-expansion"))?.[collectionID] === true
       )
-      const requestLink = row.closest(".pointer-events-auto")
+      stage = "opening approved request"
+      const requestLink = (await until(() => collectionName(savedRequest)))
+        .closest(".pointer-events-auto")
       requestLink.click()
-      await until(() => requestLink.querySelector(".animate-ping"))
+      await until(() =>
+        collectionName(savedRequest)
+          ?.closest(".pointer-events-auto")
+          .querySelector(".animate-ping")
+      )
       const casesTab = await until(
         () =>
           exactText(document, "[role=tab]", "接口用例") ||
@@ -476,10 +491,14 @@
         named(document, ["New test case", "新建用例"])
       )
       addCase.click()
+      stage = "saving a request case"
       const caseForm = await until(() =>
-        document.querySelector("form:has(input[type=number])")
+        document.querySelector(".request-cases form")
       )
-      const [caseName, status] = caseForm.querySelectorAll("input")
+      const caseName = caseForm.querySelector("input[required]")
+      const status = caseForm.querySelector(
+        '.assertion-editor input[aria-label$="预期值"], .assertion-editor input[aria-label$="Expected"]'
+      )
       caseName.value = savedCase
       status.value = "422"
       caseName.dispatchEvent(new Event("input", { bubbles: true }))
@@ -538,15 +557,15 @@
         const trigger = await until(() =>
           named(document, ["切换协议", "Switch protocol"])
         )
-        trigger.click()
-        const option = await until(() =>
-          [
-            ...document.querySelectorAll(
-              ".tippy-box[data-state='visible'] button,[data-state='visible'] [role='menuitem']"
-            ),
-          ].find((button) => button.textContent.trim() === name)
+        trigger.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
         )
-        option.click()
+        const option = await until(() =>
+          exactText(document, '[role="option"]', name)
+        )
+        option.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+        )
       }
       await selectProtocol("WebSocket")
       const connect = await until(() =>
@@ -582,10 +601,32 @@
       })
       if (location.pathname !== "/")
         throw new Error("GraphQL opened a separate page")
+      // 新请求默认为空，验收显式填写查询，不依赖旧的示例数据。
+      const queryEditor = await until(() =>
+        [...document.querySelectorAll('main .cm-content[contenteditable="true"]')]
+          .find((node) =>
+            node.getClientRects().length > 0 &&
+            node.cmView?.rootView?.view !== gqlEndpoint
+          )?.cmView?.rootView?.view
+      )
+      queryEditor.dispatch({
+        changes: {
+          from: 0,
+          to: queryEditor.state.doc.length,
+          insert: "query Request { method url headers { key value } }",
+        },
+      })
       const runGraphql = await until(() => named(document, ["Request"]))
       runGraphql.click()
       await until(() =>
         document.body.textContent.includes("native-workbench-graphql")
+      )
+      // 标签编辑使用延迟落盘，确认查询已保存后才能退出并验收重启恢复。
+      await until(async () =>
+        (await store("restTabs"))?.orderedDocs?.some(({ doc }) =>
+          doc.type === "gql-request" &&
+          doc.request.query === "query Request { method url headers { key value } }"
+        )
       )
     }
     stage = "rule Mock dashboard"
