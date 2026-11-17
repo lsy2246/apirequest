@@ -42,20 +42,23 @@ export function resultRequests(
 }
 export function reportFailureCount(report: WorkbenchReport) {
   return report.steps
-    ? report.steps.filter((step) => {
-        const assertions =
-          (step.passedTests ??
-            step.assertions?.reduce((sum, test) => sum + test.passed, 0) ??
-            0) +
-          (step.failedTests ??
-            step.assertions?.reduce((sum, test) => sum + test.failed, 0) ??
-            0)
-        return (
-          !step.passed ||
-          (!assertions &&
-            (step.response?.statusCode ?? step.statusCode ?? 0) >= 400) ||
-          (step.failedTests ?? 0) > 0
-        )
-      }).length
+    ? Math.max(
+        report.summary.failed,
+        report.steps.filter((step) => {
+          const assertions =
+            (step.passedTests ??
+              step.assertions?.reduce((sum, test) => sum + test.passed, 0) ??
+              0) +
+            (step.failedTests ??
+              step.assertions?.reduce((sum, test) => sum + test.failed, 0) ??
+              0)
+          return (
+            !step.passed ||
+            (!assertions &&
+              (step.response?.statusCode ?? step.statusCode ?? 0) >= 400) ||
+            (step.failedTests ?? 0) > 0
+          )
+        }).length
+      )
     : report.summary.failed
 }

@@ -67,14 +67,16 @@ export const collectionsRunner = async (
 
   const resolvedDelay = delay ?? 0;
 
-  const requestsReport: RequestReport[] = [];
+  const requestsReport: RequestReport[] = [...(param.resumeResults ?? [])];
+  let remainingSkip = requestsReport.length;
+  const resumeIteration = requestsReport.at(-1)?.iteration ?? 1;
   const collectionQueue = getCollectionQueue(collections);
 
   // If iteration count is not supplied, it should be based on the size of iteration data if in scope
   const resolvedIterationCount = iterationCount ?? iterationData?.length ?? 1;
 
-  const originalSelectedEnvs = [...envs.selected];
-  const originalGlobalEnvs = [...envs.global];
+  const originalSelectedEnvs = [...(param.initialEnvs ?? envs).selected];
+  const originalGlobalEnvs = [...(param.initialEnvs ?? envs).global];
 
   for (let count = 0; count < resolvedIterationCount; count++) {
     if (resolvedIterationCount > 1) {
@@ -82,8 +84,10 @@ export const collectionsRunner = async (
     }
 
     // Reset `envs` to the original value at the start of each iteration
-    if (!keepVariableValues) envs.selected = [...originalSelectedEnvs];
-    if (keepVariableValues === false) envs.global = [...originalGlobalEnvs];
+    if (!(remainingSkip > 0 && count + 1 <= resumeIteration)) {
+      if (!keepVariableValues) envs.selected = [...originalSelectedEnvs];
+      if (keepVariableValues === false) envs.global = [...originalGlobalEnvs];
+    }
 
     if (iterationData) {
       // Ensure last item is picked if the iteration count exceeds size of the iteration data
@@ -112,7 +116,16 @@ export const collectionsRunner = async (
         foldersFirst,
         [],
         [],
-        param.onRequestComplete
+        param.onRequestComplete,
+        param.beforeRequest,
+        count + 1,
+        () => {
+          if (remainingSkip > 0) {
+            remainingSkip--;
+            return true;
+          }
+          return false;
+        }
       );
       for (const report of requestsReport.slice(firstResult))
         report.iteration = count + 1;
@@ -134,7 +147,13 @@ const processCollection = async (
   foldersFirst?: boolean,
   ancestorPreRequestScripts: string[] = [],
   ancestorTestScripts: string[] = [],
-  onRequestComplete?: () => void
+  onRequestComplete?: (report: RequestReport) => void | Promise<void>,
+  beforeRequest?: (entry?: {
+    name: string;
+    iteration: number;
+  }) => Promise<void>,
+  iteration = 1,
+  skipRequest?: () => boolean
 ) => {
   // Accumulate scripts from root -> current collection for inheritance
   // filterValidScripts strips empty, whitespace-only, and module-prefix-only scripts
@@ -151,6 +170,8 @@ const processCollection = async (
     // GraphQL requests become REST-shaped stubs so the shared pipeline runs
     // them unchanged; unrunnable stubs fail at effective-request time
     for (const request of collection.requests) {
+      if (skipRequest?.()) continue;
+      await beforeRequest?.({ name: request.name, iteration });
       const _request = isGQLRequest(request)
         ? preProcessGQLRequest(request, collection)
         : preProcessRequest(request as HoppRESTRequest, collection);
@@ -184,8 +205,9 @@ const processCollection = async (
 
       // Storing current request's report.
       const requestReport = result.report;
+      requestReport.iteration = iteration;
       requestsReport.push(requestReport);
-      onRequestComplete?.();
+      await onRequestComplete?.(requestReport);
       if (stopOnError && !requestReport.result) return false;
     }
     return true;
@@ -241,7 +263,10 @@ const processCollection = async (
       foldersFirst,
       inheritedPreRequestScripts,
       inheritedTestScripts,
-      onRequestComplete
+      onRequestComplete,
+      beforeRequest,
+      iteration,
+      skipRequest
     );
     if (!completed) return false;
   }

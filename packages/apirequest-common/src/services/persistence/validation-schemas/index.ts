@@ -600,6 +600,8 @@ export const WORKSPACE_TABS_STATE_SCHEMA = z
             status: z.enum([
               "idle",
               "running",
+              "pausing",
+              "paused",
               "completed",
               "stopped",
               "error",

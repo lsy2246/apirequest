@@ -19,6 +19,20 @@
           : t("workbench.automation")
       }}</span>
     </header>
+    <details
+      v-if="report?.events?.length"
+      class="border-b border-divider px-5 py-2"
+    >
+      <summary>{{ t("workbench.recovery_events") }}</summary>
+      <p
+        v-for="(event, index) in report.events"
+        :key="index"
+        class="py-1 text-secondaryLight"
+      >
+        {{ new Date(event.at).toLocaleString() }} ·
+        {{ t(`workbench.recovery_event_${event.action}`) }}
+      </p>
+    </details>
     <HttpTestRunner
       v-if="viewTab"
       :key="viewTab.id"
@@ -50,36 +64,14 @@
       </div>
     </header>
     <WorkbenchSavedPlans kind="automation" allow-scheduling hide-heading />
-    <section v-if="activeRunTabs.length" class="workbench-panel mb-6">
-      <h3
-        class="border-b border-divider px-5 py-3 font-semibold text-secondaryDark"
-      >
-        {{ t("workbench.run_windows") }}
-      </h3>
-      <button
-        v-for="run in activeRunTabs"
-        :key="run.id"
-        type="button"
-        class="flex w-full items-center justify-between gap-4 border-b border-dividerLight px-5 py-3 text-left last:border-0 hover:bg-primaryLight"
-        @click="router.push({ path: '/automation', query: { run: run.id } })"
-      >
-        <span class="truncate text-secondaryDark">{{
-          run.document.collection.name
-        }}</span
-        ><span class="text-tiny text-secondaryLight">{{
-          t("workbench.view_report")
-        }}</span>
-      </button>
-    </section>
-    <WorkbenchLiveRuns />
     <WorkbenchReports kind="automation" />
   </WorkbenchPage>
 </template>
 
 <script setup lang="ts">
+import { useWorkbenchLiveQuery } from "~/composables/workbenchLive"
 import { provideWorkbenchLive } from "~/composables/workbenchLive"
 import WorkbenchPage from "~/components/workbench/Page.vue"
-import WorkbenchLiveRuns from "~/components/workbench/LiveRuns.vue"
 import WorkbenchReports from "~/components/workbench/Reports.vue"
 import WorkbenchSavedPlans from "~/components/workbench/SavedPlans.vue"
 import { computed, ref, watch, onBeforeUnmount } from "vue"
@@ -116,11 +108,6 @@ const runTabs = computed(() =>
         tab.document.type === "test-runner"
     )
 )
-const activeRunTabs = computed(() =>
-  runTabs.value.filter(
-    (tab) => tab.document.status === "running" || tab.document.status === "idle"
-  )
-)
 const runID = computed(() =>
   typeof route.query.run === "string" ? route.query.run : ""
 )
@@ -154,40 +141,75 @@ const updateTab = (tab: HoppTab<HoppTestRunnerDocument>) => {
   else tabs.updateTab(tab)
 }
 let controller: AbortController | undefined
-watch(
-  reportID,
-  async (id) => {
-    controller?.abort()
-    controller = new AbortController()
-    const signal = controller.signal
+const refreshReport = async (id: string) => {
+  controller?.abort()
+  controller = new AbortController()
+  const signal = controller.signal
+  const previous = report.value?.id === id ? archivedTab.value : undefined
+  if (!previous) {
     report.value = undefined
     archivedTab.value = undefined
-    error.value = ""
-    if (!id) return
-    loading.value = true
-    try {
-      await ready
-      let found = reports.value.find(
-        (item) => item.id === id && item.kind === "automation"
-      )
-      if (!found && workbenchSchedulesAvailable())
-        found = (
-          await workbenchMcpAPI<WorkbenchReport[]>(
-            "automation/reports",
-            undefined,
-            signal
-          )
-        ).find((item) => item.id === id && item.kind === "automation")
-      if (signal.aborted) return
-      report.value = found
-      if (found) archivedTab.value = savedReportTab(found)
-    } catch (failure) {
-      if (!signal.aborted) error.value = (failure as Error).message
-    } finally {
-      if (!signal.aborted) loading.value = false
+  }
+  error.value = ""
+  if (!id) return
+  loading.value = true
+  try {
+    await ready
+    let found = reports.value.find(
+      (item) => item.id === id && item.kind === "automation"
+    )
+    if (!found && workbenchSchedulesAvailable())
+      found = (
+        await workbenchMcpAPI<WorkbenchReport[]>(
+          "automation/reports",
+          undefined,
+          signal
+        )
+      ).find((item) => item.id === id && item.kind === "automation")
+    if (signal.aborted) return
+    report.value = found
+    if (found) {
+      const restored = savedReportTab(found)
+      const selected = previous?.document.request?.runnerRequestID
+      const request = selected
+        ? restored.document.iterationResults
+            ?.flatMap((iteration) => iteration.resultCollection?.requests ?? [])
+            .find(
+              (item) =>
+                (
+                  item as import("~/services/test-runner/test-runner.service").TestRunnerRequest
+                ).runnerRequestID === selected
+            )
+        : undefined
+      if (request && previous) {
+        restored.document.request =
+          request as import("~/services/test-runner/test-runner.service").TestRunnerRequest
+        restored.document.selectedRequestPath =
+          previous.document.selectedRequestPath
+        restored.document.selectedIteration =
+          previous.document.selectedIteration
+      }
+      archivedTab.value = restored
     }
+  } catch (failure) {
+    if (!signal.aborted) error.value = (failure as Error).message
+  } finally {
+    if (!signal.aborted) loading.value = false
+  }
+}
+watch(
+  [reportID, reports],
+  ([id]) => {
+    void refreshReport(id)
   },
   { immediate: true }
+)
+useWorkbenchLiveQuery(
+  ["automation"],
+  async () => {
+    if (reportID.value) await refreshReport(reportID.value)
+  },
+  { available: workbenchSchedulesAvailable() }
 )
 onBeforeUnmount(() => controller?.abort())
 </script>

@@ -543,7 +543,10 @@ import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
 import { useNativeFolderExpansion } from "~/composables/nativeFolderExpansion"
 import { platform } from "~/platform"
 import { useDebounceFn, useLocalStorage } from "@vueuse/core"
-import { isRootRequestCollection } from "~/newstore/collections"
+import {
+  isRootRequestCollection,
+  navigateToFolderWithIndexPath,
+} from "~/newstore/collections"
 import { CurrentSortValuesService } from "~/services/current-sort.service"
 
 export type Collection = {
@@ -1174,22 +1177,13 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
     public filterText: Ref<string>
   ) {}
 
-  navigateToFolderWithIndexPath(
-    collections: HoppCollection[],
-    indexPaths: number[]
-  ) {
-    if (indexPaths.length === 0) return null
-
-    let target = collections[indexPaths.shift() as number]
-
-    while (indexPaths.length > 0)
-      target = target?.folders[indexPaths.shift() as number]
-
-    return target !== undefined ? target : null
-  }
-
-  getChildren(id: string | null): Ref<ChildrenResult<MyCollectionNode>> {
+  getChildren(
+    id: string | null,
+    type?: string
+  ): Ref<ChildrenResult<MyCollectionNode>> {
     return computed(() => {
+      // 树会自动展开唯一的根节点；请求是叶子，不能把请求 ID 当作目录路径。
+      if (type === "requests") return { status: "loaded", data: [] }
       if (id === null) {
         const folders = this.data.value.flatMap((item, index) =>
           isRootRequestCollection(item)
@@ -1235,10 +1229,7 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
 
       const indexPath = id.split("/").map((x) => parseInt(x))
 
-      const item = this.navigateToFolderWithIndexPath(
-        this.data.value,
-        indexPath
-      )
+      const item = navigateToFolderWithIndexPath(this.data.value, indexPath)
 
       if (item) {
         const data = [

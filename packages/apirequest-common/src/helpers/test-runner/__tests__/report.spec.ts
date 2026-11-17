@@ -62,7 +62,7 @@ describe("saved automation request outcomes", () => {
       errors: ["REQUEST_ERROR", "network_fail"],
     })
     expect(steps[2].name).toBe("2 / Suite / Folder / Read")
-    expect(steps[0].response?.body).toBe("actual payload")
+    expect(atob(steps[0].response!.body)).toBe("actual payload")
     expect(JSON.stringify(steps[1].errorDetails)).toContain("ECONNREFUSED")
     expect(JSON.stringify(steps)).not.toContain("header-secret")
     expect(steps[0].endpoint).toBe("https://private.example?token=secret")

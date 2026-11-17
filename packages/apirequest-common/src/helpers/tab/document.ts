@@ -92,7 +92,16 @@ export type HoppTestRunnerDocument = {
   /**
    * initiate test runner on tab open
    */
-  status: "idle" | "running" | "completed" | "stopped" | "error"
+  status:
+    | "idle"
+    | "running"
+    | "pausing"
+    | "paused"
+    | "completed"
+    | "stopped"
+    | "error"
+  runError?: unknown
+  recovery?: import("~/services/test-runner/test-runner.service").ManualRunRecovery
 
   /**
    * The collection as it is in the document

@@ -88,7 +88,6 @@
   </div>
   <CollectionsSaveRequest
     v-if="showSaveRequestModal"
-    mode="workspace"
     :show="showSaveRequestModal"
     @hide-modal="showSaveRequestModal = false"
   />

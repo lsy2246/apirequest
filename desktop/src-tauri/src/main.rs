@@ -31,6 +31,11 @@ enum StoreAction {
         key: String,
         value: Value,
     },
+    Page {
+        scope: String,
+        skip: usize,
+        take: usize,
+    },
 }
 
 #[tauri::command]
@@ -42,6 +47,9 @@ async fn workbench_store(
     tauri::async_runtime::spawn_blocking(move || {
         let namespace = "kernel.v1";
         let result = match action {
+            StoreAction::Page { scope, skip, take } => database
+                .store_page_without(&scope, namespace, skip, take.min(100), &[])
+                .map(|values| Some(Value::Array(values))),
             StoreAction::Get { scope, key } => database.store_get(&scope, namespace, &key),
             StoreAction::Put { scope, key, value } => database
                 .store_put(&StoreEntry {
@@ -203,6 +211,7 @@ fn main() {
                         "restart": std::env::var_os("APIREQUEST_NATIVE_SMOKE_RESTART").is_some(),
                         "captureOnly": std::env::var_os("APIREQUEST_NATIVE_CAPTURE_SMOKE").is_some(),
                         "mockOnly": std::env::var_os("APIREQUEST_NATIVE_MOCK_SMOKE").is_some(),
+                        "saveOnly": std::env::var_os("APIREQUEST_NATIVE_SAVE_SMOKE").is_some(),
                     });
                     let script = format!(
                         "{script}window.__workbenchSmoke = {config};localStorage.setItem('collections', '[]');history.replaceState(null, '', '/?' + new URLSearchParams({{ url: window.__workbenchSmoke.target, method: 'GET' }}));window.addEventListener('DOMContentLoaded', () => {{ {} }});",

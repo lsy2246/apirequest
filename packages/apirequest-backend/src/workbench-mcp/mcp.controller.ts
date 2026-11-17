@@ -172,11 +172,30 @@ export class WorkbenchMcpController {
     return this.automation.runs(req.user.uid);
   }
 
+  @Post('automation/runs/:id/control')
+  @UseGuards(JwtAuthGuard)
+  controlRun(
+    @Req() req: OwnerRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    this.owner(req);
+    object(body);
+    return this.automation.control(req.user.uid, id, body.action, body.choice);
+  }
+
   @Get('automation/reports')
   @UseGuards(JwtAuthGuard)
   reports(@Req() req: OwnerRequest) {
     this.owner(req);
     return this.automation.reports(req.user.uid);
+  }
+
+  @Post('automation/reports/:id/delete')
+  @UseGuards(JwtAuthGuard)
+  deleteReport(@Req() req: OwnerRequest, @Param('id') id: string) {
+    this.owner(req);
+    return this.automation.deleteReport(req.user.uid, id);
   }
 
   @Post('automation/schedules')

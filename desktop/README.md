@@ -23,6 +23,7 @@ python3 desktop/prepare-capture.py
 pnpm --dir desktop run prepare:native
 cargo test --locked --manifest-path desktop/workbench-core/Cargo.toml
 cargo build --locked --manifest-path desktop/src-tauri/Cargo.toml
+python3 desktop/src-tauri/tests/smoke.py desktop/src-tauri/target/debug/apirequest-native --save-only
 python3 desktop/src-tauri/tests/smoke.py desktop/src-tauri/target/debug/apirequest-native
 (cd desktop && npm exec --yes --package=@tauri-apps/cli@2.11.3 -- tauri build --bundles dmg)
 ```

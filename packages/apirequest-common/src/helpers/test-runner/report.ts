@@ -13,6 +13,7 @@ export function reportError(
   value: unknown,
   seen = new Set<unknown>()
 ): unknown {
+  if (typeof value === "bigint") return String(value)
   if (value === null || typeof value !== "object") return value
   if (seen.has(value)) return "[Circular]"
   seen.add(value)
@@ -33,11 +34,13 @@ export function reportError(
   ]) {
     if (error[key] !== undefined) result[key] = reportError(error[key], seen)
   }
-  if (!Object.keys(result).length)
-    for (const [key, item] of Object.entries(error)) {
-      if (!["config", "request", "response"].includes(key))
-        result[key] = reportError(item, seen)
-    }
+  for (const [key, item] of Object.entries(error)) {
+    if (
+      !Object.hasOwn(result, key) &&
+      !["config", "request", "response"].includes(key)
+    )
+      result[key] = reportError(item, seen)
+  }
   return result
 }
 
@@ -48,13 +51,19 @@ export function summarizeRunnerResponse(
   const received = response.type === "success" || response.type === "fail"
   let savedResponse: WorkbenchReportStep["response"]
   if (received && persistResponse) {
-    const body = new TextDecoder().decode(response.body)
+    const bytes = new Uint8Array(response.body)
+    const chunks: string[] = []
+    for (let offset = 0; offset < bytes.length; offset += 32768)
+      chunks.push(
+        String.fromCharCode(...bytes.subarray(offset, offset + 32768))
+      )
+    const body = btoa(chunks.join(""))
     savedResponse = {
       statusCode: response.statusCode,
       statusText: response.statusText,
       headers: response.headers,
-      body: body.slice(0, 256 * 1024),
-      bodyTruncated: body.length > 256 * 1024,
+      body,
+      bodyEncoding: "base64",
     }
   }
   const errorDetails: NonNullable<WorkbenchReportStep["errorDetails"]> =
@@ -158,6 +167,12 @@ export function collectReportSteps(
       const received = response?.type === "success" || response?.type === "fail"
       if (response && !received && response.type !== "loading")
         errors.push(response.type)
+      if (
+        response?.errorDetails?.some(
+          (error) => error.code === "SKIPPED_UNKNOWN"
+        )
+      )
+        errors.splice(0, errors.length, "SKIPPED_UNKNOWN")
       steps.push({
         name: [...path, ...(request.folderPath ?? []), request.name].join(
           " / "
@@ -189,6 +204,7 @@ export function collectReportSteps(
         ],
         response: response?.response,
         responseOmitted: response?.responseOmitted,
+        testResults: request.testResults ?? undefined,
         assertions: request.testResults
           ? collectAssertions(request.testResults)
           : [],

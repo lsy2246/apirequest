@@ -203,7 +203,6 @@
     </HoppSmartModal>
     <CollectionsSaveRequest
       v-if="savingRequest"
-      :mode="saveRequestMode"
       :show="savingRequest"
       @hide-modal="onSaveModalClose"
     />
@@ -342,10 +341,6 @@ function bindRequestToURLParams() {
 const onTabUpdate = (tab: HoppTab<HoppTabDocument>) => {
   tabs.updateTab(tab)
 }
-
-// Always "workspace" — on the unified page every save goes through
-// WorkspaceTabsService, for both REST and GQL documents.
-const saveRequestMode = computed(() => "workspace" as const)
 
 const addNewTab = () => {
   const tab = tabs.createNewTab({

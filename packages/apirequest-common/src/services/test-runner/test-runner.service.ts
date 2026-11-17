@@ -36,7 +36,12 @@ import {
   applyRunOrder,
   getRequestSelectionID,
 } from "~/helpers/runner/selection"
-import { clearTemporaryVariables } from "~/helpers/runner/temp_envs"
+import {
+  clearTemporaryVariables,
+  getTemporaryVariables,
+  setTemporaryVariables,
+} from "~/helpers/runner/temp_envs"
+import { requestHasResult, requestFailed } from "~/helpers/runner/outcome"
 
 // Sentinel errors that unwind the runner: "Test execution stopped" is a user
 // cancel, "…stopped due to error" a stop-on-error halt. Both are normal
@@ -46,6 +51,8 @@ const isStopSignal = (error: unknown): error is Error =>
   error instanceof Error && error.message.startsWith(STOP_SIGNAL_PREFIX)
 
 export type TestRunnerOptions = {
+  recovery?: ManualRunRecovery
+  onProgress?: () => Promise<void>
   stopRef: Ref<boolean>
 } & TestRunnerConfig
 
@@ -53,7 +60,7 @@ export type TestRunnerOptions = {
  * One request resolved against its ancestry and bound to its slot in the
  * result tree.
  */
-type PlannedRequest = {
+export type PlannedRequest = {
   /** Selection ID — how the run sequence refers to this request. */
   id: string
   request: TestRunnerRequest
@@ -67,6 +74,19 @@ type PlannedRequest = {
   /** Kept unmerged for GQL requests — their executor slots auth headers
    * between request and inherited headers itself. */
   inheritedHeaders: HoppRESTHeaders
+}
+
+export type ManualRunRecovery = {
+  version: 1
+  collection: HoppCollection
+  config: TestRunnerConfig
+  plan: PlannedRequest[]
+  iteration: number
+  nextRequest: number
+  inFlight?: { name: string; iteration: number }
+  environment?: InitialEnvironmentState
+  baseEnvironment?: InitialEnvironmentState
+  temporaryVariables: ReturnType<typeof getTemporaryVariables>
 }
 
 /**
@@ -113,12 +133,92 @@ export class TestRunnerService extends Service {
 
   private readonly activeRunStops = new Map<string, Ref<boolean>>()
 
+  private readonly runControls = new Map<
+    string,
+    {
+      tab: Ref<HoppTab<HoppTestRunnerDocument>>
+      options: TestRunnerOptions
+      paused: boolean
+      wake?: () => void
+      interruptDelay?: () => void
+    }
+  >()
+
+  public pauseRun(tabID: string): boolean {
+    const control = this.runControls.get(tabID)
+    if (!control || control.options.stopRef.value) return false
+    control.paused = true
+    control.tab.value.document.status = "pausing"
+    control.interruptDelay?.()
+    void control.options.onProgress?.()
+    return true
+  }
+
+  public resumeRun(tabID: string): boolean {
+    const control = this.runControls.get(tabID)
+    if (!control || !control.paused) return false
+    control.paused = false
+    control.tab.value.document.status = "running"
+    control.wake?.()
+    void control.options.onProgress?.()
+    return true
+  }
+
+  private async waitForResume(tabID: string) {
+    const control = this.runControls.get(tabID)
+    if (!control) return
+    while (control.paused && !control.options.stopRef.value) {
+      control.tab.value.document.status = "paused"
+      // Install the wake-up before saving: resume/stop may arrive while storage is busy.
+      const resumed = new Promise<void>((resolve) => {
+        control.wake = resolve
+      })
+      await control.options.onProgress?.()
+      await resumed
+      control.wake = undefined
+    }
+    if (control.options.stopRef.value) throw new Error("Test execution stopped")
+  }
+
+  private async waitBetweenRequests(tabID: string, milliseconds: number) {
+    const control = this.runControls.get(tabID)
+    if (!control) return delay(milliseconds)
+    let remaining = milliseconds
+    while (remaining > 0) {
+      await this.waitForResume(tabID)
+      const started = performance.now()
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, remaining)
+        control.interruptDelay = () => {
+          clearTimeout(timer)
+          resolve()
+        }
+      })
+      control.interruptDelay = undefined
+      remaining -= performance.now() - started
+    }
+    await this.waitForResume(tabID)
+  }
+
   /** Signals the active run in a tab to stop after its current request settles. */
   public stopRun(tabID: string): boolean {
     const stopRef = this.activeRunStops.get(tabID)
     if (!stopRef) return false
     stopRef.value = true
+    this.runControls.get(tabID)?.wake?.()
+    this.runControls.get(tabID)?.interruptDelay?.()
     return true
+  }
+
+  public hasRun(tabID: string) {
+    return this.runControls.has(tabID)
+  }
+
+  public discardPausedRun(tabID: string) {
+    const control = this.runControls.get(tabID)
+    if (control?.tab.value.document.status === "paused")
+      return this.stopRun(tabID)
+    return false
   }
 
   private createEmptyMeta(): TestRunnerMeta {
@@ -198,6 +298,7 @@ export class TestRunnerService extends Service {
     ancestorVariables: HoppCollectionVariable[] = []
   ) {
     const tabID = tab.value.id
+    tab.value.document.runError = undefined
     // `undefined` runs the full collection; an array runs that subset.
     const selection = tab.value.document.selectedRequestRefIds
     const selectionActive = Array.isArray(selection)
@@ -207,29 +308,37 @@ export class TestRunnerService extends Service {
     // (the UI sends `undefined` for "run all"), or IDs that stopped resolving
     // after a refetch. Fail loudly rather than report a successful empty run.
     if (
+      !options.recovery &&
       selectionActive &&
       !this.collectionHasSelectedRequest(collection, [], selectedIDs, true)
     ) {
       tab.value.document.status = "error"
+      tab.value.document.iterationResults = []
+      tab.value.document.testRunnerMeta = this.createEmptyMeta()
+      tab.value.document.runError =
+        "The request selection matches no requests in this collection"
       console.error(
         "[Test Runner] The request selection matches no requests in this " +
           "collection. Provide at least one request that exists in the tree, " +
           "or omit the selection to run the full collection."
       )
-      return
+      return options.onProgress?.()
     }
 
     this.activeRunStops.set(tabID, options.stopRef)
+    this.runControls.set(tabID, { tab, options, paused: false })
 
     // Reset the result collection
     tab.value.document.status = "running"
     tab.value.document.request = null
     tab.value.document.selectedRequestPath = undefined
     tab.value.document.resultCollection = undefined
-    tab.value.document.iterationResults = []
-    tab.value.document.selectedIteration = 0
-    tab.value.document.testRunnerMeta = this.createEmptyMeta()
-    clearTemporaryVariables()
+    if (!options.recovery) {
+      tab.value.document.iterationResults = []
+      tab.value.document.selectedIteration = 0
+      tab.value.document.testRunnerMeta = this.createEmptyMeta()
+      clearTemporaryVariables()
+    } else setTemporaryVariables(cloneDeep(options.recovery.temporaryVariables))
 
     // One run per dataset row when a data file is attached; config.iterations
     // only drives dataset-less runs (persisted/external state can diverge
@@ -242,18 +351,40 @@ export class TestRunnerService extends Service {
     // mention keeps collection order, after everything it does.
     const runOrder = new Map((selection ?? []).map((id, index) => [id, index]))
 
-    return this.runTestIterations(
-      tab,
-      collection,
-      options,
-      resolvedIterations,
-      selectedIDs,
-      selectionActive,
-      runOrder,
-      ancestorPreRequestScripts,
-      ancestorTestScripts,
-      ancestorVariables
-    )
+    options.recovery ??= {
+      version: 1,
+      collection: cloneDeep(collection),
+      config: cloneDeep(tab.value.document.config),
+      plan: cloneDeep(
+        applyRunOrder(
+          this.planCollection(
+            collection,
+            selectedIDs,
+            selectionActive,
+            [],
+            [],
+            undefined,
+            undefined,
+            ancestorVariables,
+            ancestorPreRequestScripts,
+            ancestorTestScripts
+          ),
+          runOrder
+        ).map((entry) => ({
+          ...entry,
+          collection: this.createResultCollection(entry.collection),
+        }))
+      ),
+      iteration: 0,
+      nextRequest: 0,
+      temporaryVariables: [],
+      environment: cloneDeep(captureInitialEnvironmentState()),
+      baseEnvironment: cloneDeep(captureInitialEnvironmentState()),
+    }
+    tab.value.document.recovery = options.recovery
+    const execute = () =>
+      this.runTestIterations(tab, collection, options, resolvedIterations)
+    return (options.onProgress ? options.onProgress().then(execute) : execute())
       .then(() => {
         tab.value.document.status = options.stopRef.value
           ? "stopped"
@@ -261,13 +392,18 @@ export class TestRunnerService extends Service {
       })
       .catch((error) => {
         if (isStopSignal(error)) {
-          tab.value.document.status = "stopped"
+          tab.value.document.status = options.stopRef.value
+            ? "stopped"
+            : "paused"
         } else {
           tab.value.document.status = "error"
+          tab.value.document.runError = error
           console.error("Test runner failed:", error)
         }
       })
-      .finally(() => {
+      .finally(async () => {
+        this.runControls.delete(tabID)
+        await options.onProgress?.()
         if (this.activeRunStops.get(tabID) === options.stopRef) {
           this.activeRunStops.delete(tabID)
         }
@@ -278,35 +414,35 @@ export class TestRunnerService extends Service {
     tab: Ref<HoppTab<HoppTestRunnerDocument>>,
     collection: HoppCollection,
     options: TestRunnerOptions,
-    resolvedIterations: number,
-    selectedIDs: Set<string>,
-    selectionActive: boolean,
-    runOrder: Map<string, number>,
-    ancestorPreRequestScripts: string[] = [],
-    ancestorTestScripts: string[] = [],
-    ancestorVariables: HoppCollectionVariable[] = []
+    resolvedIterations: number
   ) {
     for (
-      let iterationIndex = 0;
+      let iterationIndex = options.recovery?.iteration ?? 0;
       iterationIndex < resolvedIterations;
       iterationIndex++
     ) {
+      await this.waitForResume(tab.value.id)
       if (options.stopRef?.value) {
         tab.value.document.status = "stopped"
         throw new Error("Test execution stopped")
       }
 
-      if (!options.keepVariableValues) clearTemporaryVariables()
+      const recovery = options.recovery!
+      if (!options.keepVariableValues && recovery.nextRequest === 0) {
+        clearTemporaryVariables()
+        recovery.environment = cloneDeep(recovery.baseEnvironment)
+      }
 
-      // Without persisted values the env stores are never written back
-      // mid-iteration, so one snapshot serves the whole iteration. With
-      // keepVariableValues on, each request re-captures (left undefined here).
-      const iterationEnvState = options.keepVariableValues
-        ? undefined
-        : captureInitialEnvironmentState()
+      // Advance frozen scopes only after settled results; resetting a new
+      // iteration uses the original baseline when variable persistence is off.
+      const iterationEnvState = recovery.environment
 
-      const resultCollection = this.createResultCollection(collection)
-      const meta = this.createEmptyMeta()
+      const existing = tab.value.document.iterationResults?.find(
+        (result) => result.iteration === iterationIndex + 1
+      )
+      const resultCollection =
+        existing?.resultCollection ?? this.createResultCollection(collection)
+      const meta = existing?.meta ?? this.createEmptyMeta()
       // The UI locks the iteration count to the dataset length; if the two
       // ever diverge, reuse the last row rather than read out of bounds.
       const iterationVars = options.dataset?.rows.length
@@ -317,11 +453,12 @@ export class TestRunnerService extends Service {
           )
         : []
 
-      tab.value.document.iterationResults?.push({
-        iteration: iterationIndex + 1,
-        resultCollection,
-        meta,
-      })
+      if (!existing)
+        tab.value.document.iterationResults?.push({
+          iteration: iterationIndex + 1,
+          resultCollection,
+          meta,
+        })
       // `selectedIteration` is the iteration the user is VIEWING — owned by
       // the jump control and scroll tracking, not the run. Advancing it here
       // left a finished run's counter parked on the last iteration while the
@@ -333,25 +470,12 @@ export class TestRunnerService extends Service {
       // must be appended through the reactive view.
       const liveResultCollection = tab.value.document.resultCollection!
 
-      const orderedPlan = applyRunOrder(
-        this.planCollection(
-          collection,
-          selectedIDs,
-          selectionActive,
-          [],
-          [],
-          undefined,
-          undefined,
-          ancestorVariables,
-          ancestorPreRequestScripts,
-          ancestorTestScripts
-        ),
-        runOrder
-      )
+      const orderedPlan = recovery.plan
 
       // Results are a flat list in run order; each row carries its folder
       // path instead of nesting back under folders.
-      orderedPlan.forEach((entry) =>
+      orderedPlan.forEach((entry, index) => {
+        if (liveResultCollection.requests[index]) return
         this.addRequestToPath(liveResultCollection, [], {
           ...cloneDeep(entry.request),
           runnerRequestID: entry.id,
@@ -359,10 +483,11 @@ export class TestRunnerService extends Service {
           passedTests: 0,
           failedTests: 0,
         })
-      )
+      })
 
-      tab.value.document.testRunnerMeta.totalRequests += orderedPlan.length
-      meta.totalRequests += orderedPlan.length
+      tab.value.document.testRunnerMeta.totalRequests =
+        orderedPlan.length * resolvedIterations
+      meta.totalRequests = orderedPlan.length
 
       await this.runPlan(
         tab,
@@ -372,6 +497,11 @@ export class TestRunnerService extends Service {
         iterationVars,
         iterationEnvState
       )
+      recovery.iteration = iterationIndex + 1
+      recovery.nextRequest = 0
+      recovery.inFlight = undefined
+      recovery.temporaryVariables = cloneDeep(getTemporaryVariables())
+      await options.onProgress?.()
     }
   }
 
@@ -528,30 +658,81 @@ export class TestRunnerService extends Service {
   ) {
     try {
       for (const [index, entry] of plan.entries()) {
+        const recovery = options.recovery
+        if (recovery && index < recovery.nextRequest) continue
         if (options.stopRef?.value) {
           tab.value.document.status = "stopped"
           throw new Error("Test execution stopped")
         }
 
-        await this.runTestRequest(
-          tab,
-          entry.request,
-          entry.collection,
-          options,
-          // Result rows are allocated in this same order: plan index = row.
-          [index],
-          iterationMeta,
-          iterationVars,
-          entry.inheritedVariables,
-          entry.inheritedPreRequestScripts,
-          entry.inheritedTestScripts,
-          iterationEnvState,
-          entry.inheritedHeaders
-        )
-
+        await this.waitForResume(tab.value.id)
+        if (recovery)
+          recovery.inFlight = {
+            name: entry.request.name,
+            iteration: recovery.iteration + 1,
+          }
+        await options.onProgress?.()
+        try {
+          await this.runTestRequest(
+            tab,
+            entry.request,
+            entry.collection,
+            options,
+            // Result rows are allocated in this same order: plan index = row.
+            [index],
+            iterationMeta,
+            iterationVars,
+            entry.inheritedVariables,
+            entry.inheritedPreRequestScripts,
+            entry.inheritedTestScripts,
+            recovery?.environment ?? iterationEnvState,
+            entry.inheritedHeaders
+          )
+        } finally {
+          const result = tab.value.document.resultCollection!.requests[
+            index
+          ] as TestRunnerRequest
+          if (recovery && requestHasResult(result)) {
+            recovery.nextRequest = index + 1
+            recovery.inFlight = undefined
+            recovery.temporaryVariables = cloneDeep(getTemporaryVariables())
+            const state = recovery.environment
+            if (state && result.testResults?.envDiff) {
+              for (const scope of ["global", "selected"] as const) {
+                const diff = result.testResults.envDiff[scope]
+                const values = new Map(
+                  state.initialEnvs[scope].map((value) => [value.key, value])
+                )
+                for (const value of diff.deletions) values.delete(value.key)
+                for (const value of [...diff.additions, ...diff.updations])
+                  values.set(value.key, value)
+                state.initialEnvs[scope] = cloneDeep([...values.values()])
+              }
+              state.initialGlobalEnvs = cloneDeep(state.initialEnvs.global)
+              state.initialSelectedEnvs = cloneDeep(state.initialEnvs.selected)
+              state.initialEnvsForComparison = cloneDeep({
+                global: state.initialEnvs.global,
+                selected: state.initialEnvs.selected,
+              })
+            }
+          }
+          if (
+            options.stopOnError &&
+            requestHasResult(result) &&
+            requestFailed(result) &&
+            (recovery?.iteration ?? 0) * plan.length + index + 1 <
+              tab.value.document.testRunnerMeta.totalRequests
+          ) {
+            const control = this.runControls.get(tab.value.id)
+            if (control) control.paused = true
+            tab.value.document.status = "paused"
+          }
+          await options.onProgress?.()
+        }
+        await this.waitForResume(tab.value.id)
         if (options.delay && options.delay > 0) {
           try {
-            await delay(options.delay)
+            await this.waitBetweenRequests(tab.value.id, options.delay)
           } catch (_error) {
             if (options.stopRef?.value) {
               tab.value.document.status = "stopped"
@@ -560,6 +741,7 @@ export class TestRunnerService extends Service {
           }
         }
       }
+      if (options.stopRef?.value) throw new Error("Test execution stopped")
     } catch (error) {
       if (isStopSignal(error)) {
         throw error
@@ -674,15 +856,6 @@ export class TestRunnerService extends Service {
         iterationVars
       )
 
-      if (options.stopRef?.value) {
-        // Clear the loading flag so a stop taken mid-flight doesn't leave a
-        // permanent spinner on the row.
-        this.updateRequestAtPath(tab.value.document.resultCollection!, path, {
-          isLoading: false,
-        })
-        throw new Error("Test execution stopped")
-      }
-
       if (results && E.isRight(results)) {
         const { response, testResult } = results.right
         const updatedRequest =
@@ -708,10 +881,7 @@ export class TestRunnerService extends Service {
           testResults: testResult,
           passedTests: passed,
           failedTests: failed,
-          reportResponse: summarizeRunnerResponse(
-            response,
-            options.persistResponses
-          ),
+          reportResponse: summarizeRunnerResponse(response, true),
           response: options.persistResponses ? response : null,
           isLoading: false,
         })
@@ -767,6 +937,7 @@ export class TestRunnerService extends Service {
           throw new Error("Test execution stopped due to error")
         }
       }
+      if (options.stopRef?.value) throw new Error("Test execution stopped")
     } catch (error) {
       if (isStopSignal(error)) {
         throw error
@@ -835,15 +1006,6 @@ export class TestRunnerService extends Service {
         iterationVars
       )
 
-      if (options.stopRef?.value) {
-        // Clear the loading flag so a stop taken mid-flight doesn't leave a
-        // permanent spinner on the row.
-        this.updateRequestAtPath(tab.value.document.resultCollection!, path, {
-          isLoading: false,
-        })
-        throw new Error("Test execution stopped")
-      }
-
       if (E.isRight(results)) {
         const { response, testResult } = results.right
 
@@ -858,10 +1020,7 @@ export class TestRunnerService extends Service {
         iterationMeta.failedTests += failed
 
         this.updateRequestAtPath(tab.value.document.resultCollection!, path, {
-          reportResponse: summarizeRunnerResponse(
-            response,
-            options.persistResponses
-          ),
+          reportResponse: summarizeRunnerResponse(response, true),
           response: options.persistResponses ? response : null,
           testResults: testResult,
           passedTests: passed,
@@ -907,6 +1066,7 @@ export class TestRunnerService extends Service {
           throw new Error("Test execution stopped due to error")
         }
       }
+      if (options.stopRef?.value) throw new Error("Test execution stopped")
     } catch (error) {
       if (isStopSignal(error)) {
         throw error

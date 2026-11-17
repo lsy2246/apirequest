@@ -10,13 +10,23 @@
               :text="collectionName"
             />
             <div class="flex items-center gap-2 flex-shrink-0">
-              <HoppButtonPrimary
-                v-if="showResult && tab.document.status === 'running'"
-                :label="t('test.stop')"
-                @click="stopTests()"
+              <AutomationRunControls v-if="report" :report="report" prominent />
+              <HoppButtonSecondary
+                v-if="!report && !readonly && (isActive || canResumeRun)"
+                :disabled="tab.document.status === 'pausing'"
+                :label="
+                  t(
+                    tab.document.status === 'running'
+                      ? 'workbench_live.pause'
+                      : tab.document.status === 'pausing'
+                        ? 'workbench_live.pausing'
+                        : 'workbench_live.resume'
+                  )
+                "
+                @click="controlTests"
               />
               <HoppButtonPrimary
-                v-else-if="!readonly"
+                v-if="!readonly && !isActive && !canResumeRun"
                 :label="t('test.run_again')"
                 @click="runAgain()"
               />
@@ -34,21 +44,36 @@
           <!-- Hidden on a restored tab: a row of zeroes would crowd out the
                empty placeholder. -->
           <div
-            v-if="
-              showResult && (hasResults || tab.document.status === 'running')
-            "
+            v-if="showResult && (hasResults || isActive)"
             class="flex gap-8 px-4 py-4 overflow-x-auto"
           >
             <HttpTestRunnerMeta
               :heading="t('response.status')"
               :text="
-                tab.document.status === 'completed'
-                  ? t('workbench_live.completed')
-                  : tab.document.status === 'stopped'
-                    ? t('workbench.report_stopped')
-                    : tab.document.status === 'error'
-                      ? t('workbench.report_error_runner')
-                      : t('workbench_live.running')
+                report?.automation?.status === 'interrupted' &&
+                !report.canResume
+                  ? t('workbench.recovery_unavailable')
+                  : (report?.canResume || canResumeRun) &&
+                      [
+                        'interrupted',
+                        'error',
+                        'timeout',
+                        'runner_error',
+                        'stopped',
+                      ].includes(
+                        report?.automation?.status ?? tab.document.status
+                      )
+                    ? t('workbench_live.interrupted')
+                    : tab.document.status === 'completed'
+                      ? t('workbench_live.completed')
+                      : tab.document.status === 'stopped'
+                        ? t('workbench.report_stopped')
+                        : tab.document.status === 'paused' ||
+                            tab.document.status === 'pausing'
+                          ? t(`workbench_live.${tab.document.status}`)
+                          : tab.document.status === 'error'
+                            ? t('workbench.report_error_runner')
+                            : t('workbench_live.running')
               "
             />
             <HttpTestRunnerMeta
@@ -127,6 +152,17 @@
           </div>
         </div>
 
+        <pre
+          v-if="report?.errorDetails?.length || tab.document.runError"
+          role="alert"
+          class="whitespace-pre-wrap px-4 py-3 text-red-500"
+          >{{
+            JSON.stringify(
+              report?.errorDetails ?? reportError(tab.document.runError),
+              null,
+              2
+            )
+          }}</pre>
         <div
           class="min-h-0 flex-1 overflow-auto"
           style="--upper-runner-sticky-fold: 0px"
@@ -151,7 +187,7 @@
     </template>
     <template #secondary>
       <div
-        v-if="tab.document.status === 'running'"
+        v-if="tab.document.status === 'running' && !selectedRequest"
         class="flex flex-col items-center gap-4 justify-center h-full"
       >
         <HoppSmartSpinner />
@@ -229,6 +265,7 @@
 </template>
 
 <script setup lang="ts">
+import AutomationRunControls from "~/components/workbench/AutomationRunControls.vue"
 import { useI18n } from "@composables/i18n"
 import { HoppCollection, HoppCollectionVariable } from "@apirequest/data"
 import { SmartTreeAdapter } from "@apirequest/ui"
@@ -278,12 +315,16 @@ import {
   resultRequests,
 } from "~/helpers/runner/outcome"
 import { runnerEnvironmentLabel } from "~/helpers/runner/environment"
-import { collectReportSteps } from "~/helpers/test-runner/report"
+import { reportError } from "~/helpers/test-runner/report"
 import {
   downloadWorkbenchReport,
   useWorkbenchReports,
 } from "~/composables/workbenchReports"
-const { add: saveWorkbenchReport } = useWorkbenchReports()
+import {
+  startRecordedRun,
+  resumeRecordedRun,
+} from "~/helpers/test-runner/recorded-run"
+const { reports: savedReports, ready: reportsReady } = useWorkbenchReports()
 const t = useI18n()
 const toast = useToast()
 const colorMode = useColorMode()
@@ -364,10 +405,22 @@ const collection = computed(() => {
 })
 // for re-run config
 const showCollectionsRunnerModal = ref(false)
-const testRunnerStopRef = ref(false)
+const isActive = computed(() =>
+  ["running", "pausing", "paused"].includes(tab.value.document.status)
+)
+const canResumeRun = computed(() =>
+  savedReports.value.some(
+    (report) =>
+      report.runTabID === tab.value.id &&
+      !!report.recovery &&
+      ["paused", "interrupted", "error"].includes(
+        report.automation?.status ?? ""
+      )
+  )
+)
 const showResult = computed(() => {
   return (
-    tab.value.document.status === "running" ||
+    isActive.value ||
     tab.value.document.status === "stopped" ||
     tab.value.document.status === "completed" ||
     tab.value.document.status === "error"
@@ -424,59 +477,26 @@ const runTests = async () => {
       variables: collection.value.variables ?? [],
     }
   }
-  testRunnerStopRef.value = false // when testRunnerStopRef is false, the test runner will start running
-  // 固定本轮标签引用；关闭或切换标签后完成回调仍能保存正确的统计。
-  const runningTab = ref(tab.value)
-  const reportID = crypto.randomUUID()
-  const startedAt = new Date().toISOString()
-  const started = performance.now()
-  await testRunnerService.runTests(
-    runningTab,
+  await startRecordedRun(
+    tab.value,
     resolvedCollection,
+    { ...testRunnerConfig.value },
     {
-      ...testRunnerConfig.value,
-      stopRef: testRunnerStopRef,
-    },
-    ancestorPreRequestScripts,
-    ancestorTestScripts,
-    ancestorVariables
-  )
-  const meta = runningTab.value.document.testRunnerMeta
-  const steps = collectReportSteps(
-    runningTab.value.document.iterationResults ?? []
-  )
-  await saveWorkbenchReport({
-    id: reportID,
-    kind: "automation",
-    name: resolvedCollection.name,
-    environmentName: runningTab.value.document.environmentName,
-    environmentID: runningTab.value.document.environmentID,
-    source: {
-      collectionID: runningTab.value.document.collectionID,
-      config: { ...runningTab.value.document.config },
-    },
-    createdAt: startedAt,
-    summary: {
-      completed: steps.length,
-      failed: steps.filter((step) => !step.passed).length,
-      elapsedMs: performance.now() - started,
-    },
-    steps,
-    automation: {
-      status: runningTab.value.document.status,
-      passedTests: meta.passedTests,
-      failedTests: meta.failedTests,
-      totalTests: meta.totalTests,
-    },
-  }).catch((error) => console.error("Failed to save automation report", error))
+      pre: ancestorPreRequestScripts,
+      test: ancestorTestScripts,
+      variables: ancestorVariables,
+    }
+  ).catch(() => toast.error(t("workbench.report_save_failed")))
 }
-const stopTests = () => {
-  if (!testRunnerService.stopRun(tab.value.id)) {
-    testRunnerStopRef.value = true
-  }
-  // when we manually stop the test runner, we need to update the tab document with the current state
-  tab.value.document.testRunnerMeta = {
-    ...tab.value.document.testRunnerMeta,
+
+const controlTests = () => {
+  if (tab.value.document.status === "running")
+    testRunnerService.pauseRun(tab.value.id)
+  else if (!testRunnerService.resumeRun(tab.value.id)) {
+    const report = savedReports.value.find(
+      (item) => item.runTabID === tab.value.id
+    )
+    if (report) resumeRecordedRun(report, undefined, tab.value)
   }
 }
 const runAgain = async () => {
@@ -530,8 +550,24 @@ const resetRunnerState = () => {
     completedRequests: 0,
   }
 }
-onMounted(() => {
-  if (!props.readonly && tab.value.document.status === "idle") runTests()
+onMounted(async () => {
+  if (props.readonly) return
+  await reportsReady.catch(() => {})
+  if (tab.value.document.status === "idle") {
+    void runTests()
+    return
+  }
+  if (!testRunnerService.hasRun(tab.value.id)) {
+    const report = savedReports.value.find(
+      (item) => item.runTabID === tab.value.id && item.recovery
+    )
+    if (report?.recovery) {
+      const restored = savedReportTab(report)
+      restored.document.collection = report.recovery.collection
+      restored.document.config = report.recovery.config
+      tab.value.document = restored.document
+    }
+  }
 })
 function calculateAverageTime(
   totalTime: number,
@@ -544,12 +580,16 @@ function calculateAverageTime(
 const canExport = computed(
   () =>
     props.report ||
+    savedReports.value.some((report) => report.runTabID === tab.value.id) ||
     (showResult.value &&
       tab.value.document.status !== "running" &&
       iterationResults.value.some(({ resultCollection }) => resultCollection))
 )
 const exportResults = async (scope: RunnerExportScope) => {
-  if (props.report) return downloadWorkbenchReport(props.report)
+  const report =
+    props.report ??
+    savedReports.value.find((report) => report.runTabID === tab.value.id)
+  if (report) return downloadWorkbenchReport(report)
   const result = await exportRunnerResults(tab.value.document, scope)
   if (E.isRight(result)) toast.success(t(result.right))
   else toast.error(t(result.left))

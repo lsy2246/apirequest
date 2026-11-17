@@ -3,8 +3,14 @@
     <h3
       class="border-b border-divider px-5 py-3 font-semibold text-secondaryDark"
     >
-      {{ t("workbench.recent_reports") }}
+      {{ t("workbench.all_reports") }}
     </h3>
+    <p v-if="storageError" role="alert" class="px-5 py-3 text-red-500">
+      {{ t("workbench.report_save_failed") }} · {{ storageError }}
+    </p>
+    <p v-if="deleteError" role="alert" class="px-5 py-3 text-red-500">
+      {{ deleteError }}
+    </p>
     <WorkbenchState
       v-if="loading && !filtered.length"
       kind="loading"
@@ -54,8 +60,21 @@
           ></span
         >
         <span class="report-summary flex flex-wrap gap-4 text-tiny">
+          <span v-if="report.kind === 'automation'" class="text-accent">{{
+            reportStatusLabel(report)
+          }}</span>
           <span
-            >{{ report.summary.completed }} {{ t("workbench.requests") }}</span
+            >{{ report.summary.completed
+            }}<template
+              v-if="
+                ['running', 'pausing', 'paused'].includes(
+                  report.automation?.status ?? ''
+                )
+              "
+            >
+              / {{ report.automation?.totalRequests || "—" }}</template
+            >
+            {{ t("workbench.requests") }}</span
           >
           <span
             :class="
@@ -68,13 +87,30 @@
           t("workbench.view_report")
         }}</span>
       </button>
-      <HoppButtonSecondary
-        class="report-export"
-        :icon="IconDownload"
-        :title="t('workbench.export_report')"
-        :aria-label="t('workbench.export_report')"
-        @click="downloadWorkbenchReport(report)"
-      />
+      <div class="flex items-center gap-2">
+        <AutomationRunControls :report="report" />
+        <HoppButtonSecondary
+          class="report-export"
+          :icon="IconDownload"
+          :title="t('workbench.export_report')"
+          :aria-label="t('workbench.export_report')"
+          @click="downloadWorkbenchReport(report)"
+        />
+        <HoppButtonSecondary
+          class="report-delete"
+          :icon="IconTrash"
+          :title="
+            t(
+              isActive(report)
+                ? 'workbench.report_delete_active'
+                : 'workbench.delete_report'
+            )
+          "
+          :aria-label="t('workbench.delete_report')"
+          :disabled="isActive(report) || deleting"
+          @click="requestDelete(report)"
+        />
+      </div>
     </div>
     <WorkbenchReportDetails
       v-if="selectedReport"
@@ -82,9 +118,18 @@
       @close="selectedReport = undefined"
       @download="downloadWorkbenchReport(selectedReport)"
     />
+    <HoppSmartConfirmModal
+      :show="!!deleteTarget"
+      :title="
+        t('workbench.report_delete_confirm', { name: deleteTarget?.name ?? '' })
+      "
+      @hide-modal="!deleting && (deleteTarget = undefined)"
+      @resolve="deleteReport"
+    />
   </section>
 </template>
 <script setup lang="ts">
+import AutomationRunControls from "./AutomationRunControls.vue"
 import { reportFailureCount } from "~/helpers/runner/outcome"
 import { useWorkbenchLiveQuery } from "~/composables/workbenchLive"
 import WorkbenchReportDetails from "./ReportDetails.vue"
@@ -102,17 +147,49 @@ import {
   workbenchSchedulesAvailable,
 } from "~/helpers/workbench-mcp"
 import IconDownload from "~icons/lucide/download"
+import IconTrash from "~icons/lucide/trash-2"
 import IconChart from "~icons/lucide/chart-no-axes-combined"
 const props = defineProps<{ kind?: "load" | "automation" }>()
 const t = useI18n()
 const router = useRouter()
 const openReport = (report: WorkbenchReport) => {
   if (report.kind === "automation")
-    void router.push({ path: "/automation", query: { report: report.id } })
+    void router.push({
+      path: "/automation",
+      query: { report: report.id },
+    })
   else selectedReport.value = report
 }
-const { reports } = useWorkbenchReports()
+const { reports, storageError, remove } = useWorkbenchReports()
+const isActive = (report: WorkbenchReport) =>
+  ["running", "pausing"].includes(report.automation?.status ?? "")
+const reportStatusLabel = (report: WorkbenchReport) => {
+  const status = report.automation?.status ?? "completed"
+  if (status === "interrupted" && !report.canResume && !report.recovery)
+    return t("workbench.recovery_unavailable")
+  if (
+    (report.canResume || report.recovery) &&
+    ["error", "timeout", "runner_error", "stopped"].includes(status)
+  )
+    return t("workbench_live.interrupted")
+  if (["running", "pausing", "paused", "interrupted"].includes(status))
+    return t(`workbench_live.${status}`)
+  if (status === "stopped") return t("workbench.report_stopped")
+  return t(
+    report.summary.failed || report.errorDetails?.length
+      ? "workbench_live.failed"
+      : "workbench_live.completed"
+  )
+}
 const selectedReport = ref<WorkbenchReport>()
+const deleteTarget = ref<WorkbenchReport>()
+const deleting = ref(false),
+  deleteError = ref("")
+const requestDelete = (report: WorkbenchReport) => {
+  deleteError.value = ""
+  deleteTarget.value = report
+}
+const deletedScheduledIDs = new Set<string>()
 const scheduledReports = ref<WorkbenchReport[]>([])
 const loading = ref(false)
 const error = ref("")
@@ -120,18 +197,52 @@ const filtered = computed(() =>
   [...reports.value, ...scheduledReports.value]
     .filter((report) => !props.kind || report.kind === props.kind)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 20)
 )
 const controller = new AbortController()
+const deleteReport = async () => {
+  const report = deleteTarget.value
+  if (!report || deleting.value || isActive(report)) return
+  deleting.value = true
+  deleteError.value = ""
+  try {
+    if (report.trigger === "schedule") {
+      await workbenchMcpAPI(
+        `automation/reports/${encodeURIComponent(report.id)}/delete`,
+        {}
+      )
+      deletedScheduledIDs.add(report.id)
+      scheduledReports.value = scheduledReports.value.filter(
+        (item) => item.id !== report.id
+      )
+    } else {
+      await remove(report.id)
+      if (report.runTabID && report.automation?.status === "paused") {
+        const [{ getService }, { TestRunnerService }] = await Promise.all([
+          import("~/modules/dioc"),
+          import("~/services/test-runner/test-runner.service"),
+        ])
+        getService(TestRunnerService).discardPausedRun(report.runTabID)
+      }
+    }
+    if (selectedReport.value?.id === report.id) selectedReport.value = undefined
+    deleteTarget.value = undefined
+  } catch (failure) {
+    deleteError.value = `${t("workbench.report_delete_failed")} · ${(failure as Error).message}`
+  } finally {
+    deleting.value = false
+  }
+}
 const refreshScheduled = async () => {
   if (loading.value || controller.signal.aborted) return
   loading.value = true
   try {
-    scheduledReports.value = await workbenchMcpAPI<WorkbenchReport[]>(
-      "automation/reports",
-      undefined,
-      controller.signal
-    )
+    scheduledReports.value = (
+      await workbenchMcpAPI<WorkbenchReport[]>(
+        "automation/reports",
+        undefined,
+        controller.signal
+      )
+    ).filter((report) => !deletedScheduledIDs.has(report.id))
     error.value = ""
   } catch (failure) {
     if (!controller.signal.aborted) error.value = (failure as Error).message

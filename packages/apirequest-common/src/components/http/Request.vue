@@ -97,7 +97,6 @@
     />
     <CollectionsSaveRequest
       v-if="showSaveRequestModal"
-      mode="workspace"
       :show="showSaveRequestModal"
       :request="request"
       @hide-modal="showSaveRequestModal = false"

@@ -5,6 +5,7 @@ export function reportError(
   value: unknown,
   seen = new Set<unknown>()
 ): unknown {
+  if (typeof value === "bigint") return String(value);
   if (value === null || typeof value !== "object") return value;
   if (seen.has(value)) return "[Circular]";
   seen.add(value);
@@ -26,11 +27,12 @@ export function reportError(
   for (const key of fields) {
     if (error[key] !== undefined) result[key] = reportError(error[key], seen);
   }
-  if (!Object.keys(result).length) {
-    for (const [key, item] of Object.entries(error)) {
-      if (!["config", "request", "response"].includes(key))
-        result[key] = reportError(item, seen);
-    }
+  for (const [key, item] of Object.entries(error)) {
+    if (
+      !Object.hasOwn(result, key) &&
+      !["config", "request", "response"].includes(key)
+    )
+      result[key] = reportError(item, seen);
   }
   return result;
 }
@@ -40,12 +42,11 @@ export function reportResponse(response: RequestRunnerResponse) {
     typeof response.body === "string"
       ? response.body
       : (JSON.stringify(response.body, null, 2) ?? "");
-  const limit = 256 * 1024;
+
   return {
     statusCode: response.status,
     statusText: response.statusText,
     headers: response.headers,
-    body: body.slice(0, limit),
-    bodyTruncated: body.length > limit,
+    body,
   };
 }

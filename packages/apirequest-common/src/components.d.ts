@@ -277,6 +277,7 @@ declare module 'vue' {
     SmartEnvInput: typeof import('./components/smart/EnvInput.vue')['default']
     TabSecondary: typeof import('./components/tab/Secondary.vue')['default']
     Tippy: typeof import('vue-tippy')['Tippy']
+    WorkbenchAutomationRunControls: typeof import('./components/workbench/AutomationRunControls.vue')['default']
     WorkbenchAutomationSchedule: typeof import('./components/workbench/AutomationSchedule.vue')['default']
     WorkbenchCaseFields: typeof import('./components/workbench/CaseFields.vue')['default']
     WorkbenchCaseFilePicker: typeof import('./components/workbench/CaseFilePicker.vue')['default']

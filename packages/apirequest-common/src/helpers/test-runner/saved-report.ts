@@ -37,15 +37,18 @@ export function savedReportTab(
       method: step.method ?? "",
       endpoint: step.endpoint ?? "",
     }
-    const testResults = emptyRunnerTestResult()
-    testResults.tests = (step.assertions ?? []).map((test) => ({
-      description: test.descriptor,
-      expectResults: test.expectResults.map((result) => ({
-        status: result.status as "pass" | "fail" | "error",
-        message: result.message,
-      })),
-      tests: [],
-    }))
+    const testResults = step.testResults
+      ? JSON.parse(JSON.stringify(step.testResults))
+      : emptyRunnerTestResult()
+    if (!step.testResults)
+      testResults.tests = (step.assertions ?? []).map((test) => ({
+        description: test.descriptor,
+        expectResults: test.expectResults.map((result) => ({
+          status: result.status as "pass" | "fail" | "error",
+          message: result.message,
+        })),
+        tests: [],
+      }))
     const error = step.errorDetails?.length
       ? step.errorDetails
           .map((item) =>
@@ -56,7 +59,11 @@ export function savedReportTab(
           .join("\n")
       : step.errors.join("\n")
     const body = step.response
-      ? new TextEncoder().encode(step.response.body)
+      ? step.response.bodyEncoding === "base64"
+        ? Uint8Array.from(atob(step.response.body), (char) =>
+            char.charCodeAt(0)
+          )
+        : new TextEncoder().encode(step.response.body)
       : undefined
     const result: TestRunnerRequest = {
       ...request,
@@ -141,23 +148,34 @@ export function savedReportTab(
     document: {
       type: "test-runner",
       isDirty: false,
-      status:
-        report.automation?.status === "stopped"
+      status: ["running", "pausing", "paused"].includes(
+        report.automation?.status ?? ""
+      )
+        ? (report.automation!.status as "running" | "pausing" | "paused")
+        : report.automation?.status === "interrupted"
           ? "stopped"
-          : report.automation?.status === "error"
-            ? "error"
-            : "completed",
+          : report.automation?.status === "stopped"
+            ? "stopped"
+            : report.errorDetails?.length ||
+                !["completed", "passed", "failed"].includes(
+                  report.automation?.status ?? "completed"
+                )
+              ? "error"
+              : "completed",
       collection: collection(report.name),
       collectionID: report.source?.collectionID ?? "",
       collectionType: "my-collections",
       environmentID: report.environmentID,
       environmentName: report.environmentName ?? "—",
-      config: report.source?.config ?? {
-        iterations: groups.size || 1,
-        delay: 0,
-        stopOnError: false,
+      config: {
+        ...(report.source?.config ?? {
+          iterations: groups.size || 1,
+          delay: 0,
+          stopOnError: false,
+          persistResponses: true,
+          keepVariableValues: false,
+        }),
         persistResponses: true,
-        keepVariableValues: false,
       },
       iterationResults: iterations,
       resultCollection: iterations[0]?.resultCollection,
@@ -167,7 +185,8 @@ export function savedReportTab(
         : undefined,
       selectedIteration: 0,
       testRunnerMeta: {
-        totalRequests: report.summary.completed,
+        totalRequests:
+          report.automation?.totalRequests ?? report.summary.completed,
         completedRequests: report.summary.completed,
         totalTime: (report.steps ?? []).reduce(
           (sum, step) => sum + (step.elapsedMs ?? 0),

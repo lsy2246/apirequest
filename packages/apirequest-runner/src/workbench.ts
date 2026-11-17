@@ -4,7 +4,7 @@ import {
   HoppGQLRequest,
   HoppRESTRequest,
 } from "@apirequest/data";
-import { HoppEnvs } from "./types/request";
+import { HoppEnvs, RequestReport } from "./types/request";
 import { collectionsRunner } from "./utils/collections";
 import { reportError } from "./utils/report";
 import { getTestMetrics } from "./utils/test";
@@ -44,9 +44,8 @@ function fromTree(tree: CollectionTree, executeScripts = true): HoppCollection {
   });
 }
 
-export type WorkbenchAutomationProgress = { completed: number; total: number };
-
-export async function runWorkbenchAutomation(
+export type WorkbenchRecovery = {
+  version: 1;
   input: {
     collection: CollectionTree;
     envs: HoppEnvs;
@@ -57,30 +56,119 @@ export async function runWorkbenchAutomation(
       keepVariableValues?: boolean;
       executeScripts?: boolean;
     };
+  };
+  envs: HoppEnvs;
+  results: RequestReport[];
+  inFlight?: { name: string; iteration: number };
+};
+const snapshot = <T>(value: T): T =>
+  JSON.parse(
+    JSON.stringify(value, (_key, item) =>
+      item instanceof Error
+        ? reportError(item)
+        : typeof item === "bigint"
+          ? String(item)
+          : item
+    )
+  );
+
+export type WorkbenchAutomationProgress = {
+  completed: number;
+  total: number;
+  report?: ReturnType<typeof automationResult>;
+  recovery?: WorkbenchRecovery;
+};
+
+export async function runWorkbenchAutomation(
+  input: {
+    recovery?: WorkbenchRecovery;
+    collection: CollectionTree;
+    envs: HoppEnvs;
+    config: {
+      iterations?: number;
+      delay?: number;
+      stopOnError?: boolean;
+      keepVariableValues?: boolean;
+      executeScripts?: boolean;
+    };
   },
-  onProgress?: (progress: WorkbenchAutomationProgress) => void
+  onProgress?: (progress: WorkbenchAutomationProgress) => void | Promise<void>,
+  beforeRequest?: (pauseForError?: boolean) => Promise<void>
 ) {
   const started = Date.now();
   const count = (tree: CollectionTree): number =>
     tree.requests.length +
     tree.folders.reduce((sum, folder) => sum + count(folder), 0);
   const total = count(input.collection) * (input.config.iterations ?? 1);
-  let completed = 0;
-  onProgress?.({ completed, total });
+  const recovery: WorkbenchRecovery = input.recovery
+    ? snapshot(input.recovery)
+    : {
+        version: 1,
+        input: snapshot(input),
+        envs: snapshot(input.envs),
+        results: [],
+      };
+  const envs = snapshot(recovery.envs);
+  let completed = recovery.results.length;
+  const partial: RequestReport[] = [...recovery.results];
+  let pauseForError = false;
+  await onProgress?.({
+    completed,
+    total,
+    report: automationResult(partial, started, "running"),
+    recovery: snapshot(recovery),
+  });
   const results = await collectionsRunner({
     collections: [
       fromTree(input.collection, input.config.executeScripts !== false),
     ],
-    envs: input.envs,
+    envs,
+    initialEnvs: recovery.input.envs,
+    resumeResults: recovery.results,
     delay: input.config.delay,
     iterationCount: input.config.iterations,
-    stopOnError: input.config.stopOnError,
+    stopOnError: beforeRequest ? false : input.config.stopOnError,
     foldersFirst: true,
     keepVariableValues: input.config.keepVariableValues ?? false,
 
-    onRequestComplete: () => onProgress?.({ completed: ++completed, total }),
+    beforeRequest: async (entry) => {
+      await beforeRequest?.(pauseForError);
+      pauseForError = false;
+      recovery.inFlight = entry;
+      await onProgress?.({
+        completed,
+        total,
+        report: automationResult(partial, started, "running"),
+        recovery: snapshot(recovery),
+      });
+    },
+    onRequestComplete: async (report) => {
+      partial.push(report);
+      recovery.results = [...partial];
+      recovery.envs = snapshot(envs);
+      recovery.inFlight = undefined;
+      pauseForError =
+        input.config.stopOnError === true &&
+        (!report.result ||
+          ((report.response?.statusCode ?? 0) >= 400 &&
+            !report.tests.some((test) => test.passed + test.failed > 0)));
+      await onProgress?.({
+        completed: ++completed,
+        total,
+        report: automationResult(partial, started, "running"),
+        recovery: snapshot(recovery),
+      });
+    },
   });
 
+  return automationResult(results, started);
+}
+
+function automationResult(
+  results: RequestReport[],
+  started: number,
+  status?: string
+) {
   let failedTests = 0;
   let passedTests = 0;
   let failed = 0;
@@ -102,11 +190,12 @@ export async function runWorkbenchAutomation(
   return {
     summary: {
       completed: results.length,
-      failed: results.length ? failed : 1,
+      failed: results.length ? failed : status === "running" ? 0 : 1,
       elapsedMs: Date.now() - started,
     },
     automation: {
-      status: !results.length ? "empty" : failed ? "failed" : "passed",
+      status:
+        status ?? (!results.length ? "empty" : failed ? "failed" : "passed"),
       passedTests,
       failedTests,
       totalTests: failedTests + passedTests,

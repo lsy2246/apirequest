@@ -129,3 +129,52 @@ describe("saved report in the collection runner", () => {
     ).toBe("")
   })
 })
+
+it("round-trips a large binary failed response and full script failure details", async () => {
+  const { collectReportSteps, emptyRunnerTestResult } =
+    await import("../report")
+  const bytes = Uint8Array.from({ length: 400000 }, (_, i) => i % 256)
+  const testResults = {
+    ...emptyRunnerTestResult(),
+    scriptError: true,
+    scriptErrorDetails: {
+      message: "complete script error",
+      stack: "original stack",
+    },
+  }
+  const steps = collectReportSteps([
+    {
+      iteration: 1,
+      resultCollection: {
+        name: "binary",
+        folders: [],
+        requests: [
+          {
+            name: "failed",
+            endpoint: "http://fixture",
+            method: "GET",
+            response: {
+              type: "fail",
+              body: bytes.buffer,
+              statusCode: 500,
+              statusText: "Failed",
+              headers: [],
+              meta: { responseDuration: 1 },
+            },
+            testResults,
+            passedTests: 0,
+            failedTests: 1,
+          },
+        ],
+      },
+    },
+  ] as any)
+  expect(steps[0].response?.bodyTruncated).toBeUndefined()
+  const saved = JSON.parse(JSON.stringify({ ...report, steps }))
+  const restored = savedReportTab(saved).document.request!
+  expect(restored.testResults).toEqual(testResults)
+  expect(restored.response?.type).toBe("success")
+  if (restored.response?.type !== "success") throw new Error("missing response")
+  expect(new Uint8Array(restored.response.body)).toEqual(bytes)
+  expect(restored.error).toContain("original stack")
+})

@@ -130,10 +130,11 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
       ownerUid: string;
       planID: string;
       name: string;
-      status: 'running' | 'completed' | 'failed';
+      status: 'running' | 'pausing' | 'paused' | 'completed' | 'failed';
       startedAt: number;
       completed: number;
       total: number;
+      discarded?: boolean;
     }
   >();
   runs(ownerUid: string) {
@@ -141,6 +142,89 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
       .filter((run) => run.ownerUid === ownerUid)
       .map(({ ownerUid: _owner, ...run }) => run)
       .reverse();
+  }
+  private readonly runActions = new Map<
+    string,
+    (action: 'pause' | 'resume' | 'discard') => void
+  >();
+
+  private readonly runDiscards = new Map<string, () => Promise<void>>();
+
+  async control(
+    ownerUid: string,
+    id: string,
+    action: unknown,
+    choice?: unknown,
+  ) {
+    const run = this.activeRuns.get(id);
+    if (!run && action === 'resume') {
+      const row = await this.prisma.workbenchConfig.findFirst({
+        where: { id, ownerUid, kind: reportKind },
+      });
+      if (!row) throw new NotFoundException('Run not found');
+      const report = decode<Record<string, any>>(row.value);
+      if (!report.recovery)
+        throw new BadRequestException('This report has no recovery snapshot');
+      if (
+        !['interrupted', 'paused', 'error', 'runner_error', 'timeout'].includes(
+          report.automation?.status,
+        )
+      )
+        throw new BadRequestException('Run cannot be resumed');
+      if (report.recovery.inFlight && choice !== 'retry' && choice !== 'skip')
+        throw new BadRequestException(
+          'Choose retry or skip for the unknown request',
+        );
+      if (report.recovery.inFlight && choice === 'skip') {
+        const entry = report.recovery.inFlight;
+        report.recovery.results.push({
+          path: entry.name,
+          requestName: entry.name,
+          iteration: entry.iteration,
+          result: false,
+          tests: [],
+          errors: [
+            {
+              code: 'REQUEST_ERROR',
+              data: 'Skipped after interruption; original outcome is unknown',
+            },
+          ],
+          duration: { request: 0, test: 0, preRequest: 0 },
+        });
+      }
+      report.events = [
+        ...(report.events ?? []),
+        {
+          at: new Date().toISOString(),
+          action: choice ?? 'resume',
+          details: report.errorDetails,
+        },
+      ];
+      report.recovery.inFlight = undefined;
+      void this.execute(
+        ownerUid,
+        {
+          planID: report.planID ?? '',
+          environmentID: null,
+          rule: null,
+          overrides: [],
+          nextRunAt: null,
+        },
+        Date.now(),
+        report,
+      ).catch(() => this.logger.warn('Could not resume automation run'));
+      return { id, status: 'running' };
+    }
+    if (!run || run.ownerUid !== ownerUid)
+      throw new NotFoundException('Run not found');
+    if (action !== 'pause' && action !== 'resume')
+      throw new BadRequestException('Invalid run action');
+    const send = this.runActions.get(id);
+    if (run.discarded) throw new BadRequestException('Run is no longer active');
+    if (!send || !['running', 'pausing', 'paused'].includes(run.status))
+      throw new BadRequestException('Run is no longer active');
+    send(action);
+    return { id, status: run.status };
   }
   private scanning = false;
   private closing = false;
@@ -166,9 +250,53 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
     const rows = await this.prisma.workbenchConfig.findMany({
       where: { ownerUid, kind: reportKind },
       orderBy: { createdOn: 'desc' },
-      take: 20,
     });
-    return rows.map(({ value }) => decode(value));
+    return Promise.all(
+      rows.map(async ({ id, value }) => {
+        const report = decode<Record<string, any>>(value);
+        if (
+          ['running', 'pausing', 'paused'].includes(
+            report.automation?.status,
+          ) &&
+          !this.activeRuns.has(id)
+        ) {
+          report.automation.status = 'interrupted';
+          await this.prisma.workbenchConfig.updateMany({
+            where: { id, ownerUid, kind: reportKind },
+            data: { value: encode(report) },
+          });
+        }
+        const { recovery, ...visible } = report;
+        return {
+          ...visible,
+          canResume: !!recovery,
+          uncertainRequest: [
+            'interrupted',
+            'error',
+            'runner_error',
+            'timeout',
+          ].includes(report.automation?.status)
+            ? recovery?.inFlight
+            : undefined,
+        };
+      }),
+    );
+  }
+
+  async deleteReport(ownerUid: string, id: string) {
+    const run = this.activeRuns.get(id);
+    if (
+      run?.ownerUid === ownerUid &&
+      ['running', 'pausing'].includes(run.status)
+    )
+      throw new BadRequestException('Cannot delete an active report');
+    if (run?.ownerUid === ownerUid && run.status === 'paused')
+      await this.runDiscards.get(id)?.();
+    await this.prisma.workbenchConfig.deleteMany({
+      where: { id, ownerUid, kind: reportKind },
+    });
+    workbenchEvents.publish(ownerUid, 'automation');
+    return { id, deleted: true };
   }
 
   async save(ownerUid: string, input: unknown, planID?: string) {
@@ -356,7 +484,12 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
         const shouldRun =
           due >= this.startedAt &&
           now - due < 30_000 &&
-          !(schedule.leaseUntil > now);
+          !(schedule.leaseUntil > now) &&
+          ![...this.activeRuns.values()].some(
+            (run) =>
+              run.planID === schedule.planID &&
+              ['running', 'pausing', 'paused'].includes(run.status),
+          );
         schedule.nextRunAt = nextRun(schedule.rule, now, due);
         if (shouldRun) schedule.leaseUntil = now + timeoutMs + 30_000;
         const { count } = await this.prisma.workbenchConfig.updateMany({
@@ -377,119 +510,216 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
     }
   }
 
-  private async execute(ownerUid: string, schedule: Schedule, due: number) {
+  private async execute(
+    ownerUid: string,
+    schedule: Schedule,
+    due: number,
+    resumed?: Record<string, any>,
+  ) {
     const started = Date.now();
-    const id = randomUUID();
-    let name = 'Automation';
+    const previousElapsed = resumed?.summary?.elapsedMs ?? 0;
+    const id = resumed?.id ?? randomUUID();
+    if (this.activeRuns.has(id)) return;
+    let name = resumed?.name ?? 'Automation';
     const run = {
       id,
       ownerUid,
       planID: schedule.planID,
       name,
-      status: 'running' as 'running' | 'completed' | 'failed',
+      status: 'running' as
+        'running' | 'pausing' | 'paused' | 'completed' | 'failed',
       startedAt: started,
-      completed: 0,
-      total: 0,
+      completed: resumed?.summary?.completed ?? 0,
+      total: resumed?.automation?.totalRequests ?? 0,
+      discarded: false,
     };
     this.activeRuns.set(id, run);
-    for (const [key, previous] of this.activeRuns) {
-      if (this.activeRuns.size <= 20) break;
-      if (previous.status !== 'running') this.activeRuns.delete(key);
-    }
     workbenchEvents.publish(ownerUid, 'automation');
-    let result: Record<string, unknown>;
-    try {
-      const plan = await this.domain.get(
-        'automation',
-        schedule.planID,
-        ownerUid,
-      );
-      name = plan.name;
-      run.name = name;
-      let tree: CollectionFolder;
-      if (plan.requestID) {
-        const request = await this.prisma.userRequest.findFirst({
-          where: { id: plan.requestID, userUid: ownerUid },
-          include: { userCollection: true },
-        });
-        if (!request || request.userCollection.userUid !== ownerUid)
-          throw new Error('request_missing');
-        // 请求移动时沿用其实际所属目录的配置，其他请求不进入后台运行器。
-        const folder = request.userCollection;
-        tree = {
-          id: folder.id,
-          name: folder.title,
-          data: transformCollectionData(folder.data),
-          folders: [],
-          requests: [
-            {
-              ...(request.request as Record<string, unknown>),
-              id: request.id,
-              name: request.title,
-            },
-          ],
-        };
-      } else {
-        const collection =
-          await this.collections.exportUserCollectionToJSONObject(
-            ownerUid,
-            plan.collectionID,
-          );
-        if (E.isLeft(collection)) throw new Error('collection_missing');
-        tree = collection.right;
-      }
-      let childID = tree.id;
-      const visited = new Set<string>();
-      // 选择子目录时，祖先只提供继承配置；祖先的接口不会进入执行范围。
-      while (!visited.has(childID)) {
-        visited.add(childID);
-        const child = await this.prisma.userCollection.findFirst({
-          where: { id: childID, userUid: ownerUid },
-          include: { parent: true },
-        });
-        const parent = child?.parent;
-        if (!parent || parent.userUid !== ownerUid || visited.has(parent.id))
-          break;
-        tree = {
-          id: parent.id,
-          name: parent.title,
-          data: transformCollectionData(parent.data),
-          folders: [tree],
-          requests: [],
-        };
-        childID = parent.id;
-      }
-      const [selected, global] = await Promise.all([
-        schedule.environmentID
-          ? this.prisma.userEnvironment.findFirst({
-              where: {
-                id: schedule.environmentID,
-                userUid: ownerUid,
-                isGlobal: false,
-              },
-            })
-          : null,
-        this.prisma.userEnvironment.findFirst({
-          where: { userUid: ownerUid, isGlobal: true },
-        }),
-      ]);
-      if (schedule.environmentID && !selected)
-        throw new Error('environment_missing');
-      result = await this.run(
-        {
-          collection: tree,
-          envs: {
-            selected: variables(selected?.variables, schedule.overrides),
-            global: variables(global?.variables),
+    let result: Record<string, any> = resumed
+      ? {
+          ...resumed,
+          errorDetails: [],
+          automation: { ...resumed.automation, status: 'running' },
+        }
+      : {
+          summary: { completed: 0, failed: 0, elapsedMs: 0 },
+          automation: {
+            status: 'running',
+            passedTests: 0,
+            failedTests: 0,
+            totalTests: 0,
           },
-          config: plan.config ?? {},
+          steps: [],
+        };
+    // Insert before execution, then update this same durable report at every checkpoint.
+    let pendingSave = Promise.resolve();
+    const record = () => {
+      const value = encode({
+        id,
+        kind: 'automation',
+        name,
+        trigger: 'schedule',
+        planID: schedule.planID,
+        createdAt: resumed?.createdAt ?? new Date(started).toISOString(),
+        scheduledAt: new Date(due).toISOString(),
+        ...result,
+        updatedAt: new Date().toISOString(),
+        automation: {
+          ...result.automation,
+          totalRequests: run.total,
+          status: ['pausing', 'paused'].includes(run.status)
+            ? run.status
+            : result.automation?.status,
         },
-        (progress) => {
-          run.completed = progress.completed;
-          run.total = progress.total;
+      });
+      pendingSave = pendingSave
+        .catch(() => {})
+        .then(async () => {
+          if (run.discarded) return;
+          await this.prisma.workbenchConfig.upsert({
+            where: { id },
+            create: { id, ownerUid, kind: reportKind, value },
+            update: { value },
+          });
           workbenchEvents.publish(ownerUid, 'automation');
-        },
-      );
+        });
+      return pendingSave;
+    };
+    this.runDiscards.set(id, async () => {
+      run.discarded = true;
+      this.runActions.get(id)?.('discard');
+      await pendingSave.catch(() => {});
+    });
+    const progressCallback = (progress: {
+      completed: number;
+      total: number;
+      report?: Record<string, any>;
+      recovery?: unknown;
+    }) => {
+      run.completed = progress.completed;
+      run.total = progress.total;
+      if (progress.report)
+        result = {
+          ...result,
+          ...progress.report,
+          summary: {
+            ...progress.report.summary,
+            elapsedMs: previousElapsed + progress.report.summary.elapsedMs,
+          },
+        };
+      if (progress.recovery) result.recovery = progress.recovery;
+      return record();
+    };
+    const statusCallback = async (status: 'running' | 'pausing' | 'paused') => {
+      run.status = status;
+      await record();
+    };
+    try {
+      await record();
+      if (resumed) {
+        result = {
+          ...result,
+          ...(await this.run(
+            { ...resumed.recovery.input, recovery: resumed.recovery },
+            progressCallback,
+            id,
+            statusCallback,
+          )),
+        };
+        result.summary.elapsedMs += previousElapsed;
+        result.recovery = undefined;
+      } else {
+        const plan = await this.domain.get(
+          'automation',
+          schedule.planID,
+          ownerUid,
+        );
+        name = plan.name;
+        run.name = name;
+        let tree: CollectionFolder;
+        if (plan.requestID) {
+          const request = await this.prisma.userRequest.findFirst({
+            where: { id: plan.requestID, userUid: ownerUid },
+            include: { userCollection: true },
+          });
+          if (!request || request.userCollection.userUid !== ownerUid)
+            throw new Error('request_missing');
+          // 请求移动时沿用其实际所属目录的配置，其他请求不进入后台运行器。
+          const folder = request.userCollection;
+          tree = {
+            id: folder.id,
+            name: folder.title,
+            data: transformCollectionData(folder.data),
+            folders: [],
+            requests: [
+              {
+                ...(request.request as Record<string, unknown>),
+                id: request.id,
+                name: request.title,
+              },
+            ],
+          };
+        } else {
+          const collection =
+            await this.collections.exportUserCollectionToJSONObject(
+              ownerUid,
+              plan.collectionID,
+            );
+          if (E.isLeft(collection)) throw new Error('collection_missing');
+          tree = collection.right;
+        }
+        let childID = tree.id;
+        const visited = new Set<string>();
+        // 选择子目录时，祖先只提供继承配置；祖先的接口不会进入执行范围。
+        while (!visited.has(childID)) {
+          visited.add(childID);
+          const child = await this.prisma.userCollection.findFirst({
+            where: { id: childID, userUid: ownerUid },
+            include: { parent: true },
+          });
+          const parent = child?.parent;
+          if (!parent || parent.userUid !== ownerUid || visited.has(parent.id))
+            break;
+          tree = {
+            id: parent.id,
+            name: parent.title,
+            data: transformCollectionData(parent.data),
+            folders: [tree],
+            requests: [],
+          };
+          childID = parent.id;
+        }
+        const [selected, global] = await Promise.all([
+          schedule.environmentID
+            ? this.prisma.userEnvironment.findFirst({
+                where: {
+                  id: schedule.environmentID,
+                  userUid: ownerUid,
+                  isGlobal: false,
+                },
+              })
+            : null,
+          this.prisma.userEnvironment.findFirst({
+            where: { userUid: ownerUid, isGlobal: true },
+          }),
+        ]);
+        if (schedule.environmentID && !selected)
+          throw new Error('environment_missing');
+        result = await this.run(
+          {
+            collection: tree,
+            envs: {
+              selected: variables(selected?.variables, schedule.overrides),
+              global: variables(global?.variables),
+            },
+            config: plan.config ?? {},
+          },
+          progressCallback,
+          id,
+          statusCallback,
+        );
+        result.recovery = undefined;
+      }
     } catch (error) {
       if (error instanceof NotFoundException) {
         // MCP 删除计划后，清理其独立定时配置，避免留下反复触发的任务。
@@ -500,9 +730,7 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
             kind: scheduleKind,
           },
         });
-        this.activeRuns.delete(id);
         workbenchEvents.publish(ownerUid, 'automation');
-        return;
       }
       const code =
         error instanceof Error &&
@@ -516,39 +744,45 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
           ? error.message
           : 'runner_error';
       result = {
-        summary: { completed: 0, failed: 1, elapsedMs: Date.now() - started },
-        automation: {
-          status: code,
-          passedTests: 0,
-          failedTests: 0,
-          totalTests: 0,
+        ...result,
+        summary: {
+          ...result.summary,
+          failed: Math.max(1, result.summary.failed),
+          elapsedMs: previousElapsed + Date.now() - started,
         },
+        automation: { ...result.automation, status: code },
+        errorDetails: [
+          {
+            code,
+            data:
+              error instanceof Error
+                ? {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack,
+                    cause: error.cause,
+                  }
+                : String(error),
+          },
+        ],
       };
     }
 
     try {
-      await this.prisma.workbenchConfig.create({
-        data: {
-          id,
-          ownerUid,
-          kind: reportKind,
-          value: encode({
-            id,
-            kind: 'automation',
-            name,
-            trigger: 'schedule',
-            createdAt: new Date(started).toISOString(),
-            scheduledAt: new Date(due).toISOString(),
-            ...result,
-          }),
-        },
-      });
+      if (run.discarded) return;
+      // Final write follows all acknowledged progress writes.
+      run.status = 'running';
+      await record();
       run.status = (result.summary as { failed?: number })?.failed
         ? 'failed'
         : 'completed';
       workbenchEvents.publish(ownerUid, 'automation');
     } finally {
-      if (run.status === 'running') run.status = 'failed';
+      this.runActions.delete(id);
+      this.runDiscards.delete(id);
+      this.activeRuns.delete(id);
+      if (['running', 'pausing', 'paused'].includes(run.status))
+        run.status = 'failed';
       workbenchEvents.publish(ownerUid, 'automation');
       const where = {
         id: `${schedule.planID}:schedule`,
@@ -571,7 +805,14 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
 
   private async run(
     workerData: unknown,
-    onProgress?: (progress: { completed: number; total: number }) => void,
+    onProgress?: (progress: {
+      completed: number;
+      total: number;
+      report?: Record<string, any>;
+      recovery?: unknown;
+    }) => Promise<void>,
+    runID?: string,
+    onStatus?: (status: 'running' | 'pausing' | 'paused') => Promise<void>,
   ): Promise<Record<string, unknown>> {
     if (this.closing) throw new Error('runner_error');
     // 执行进程只接收这轮的数据，脚本和 CLI 不能读取后端进程的凭证或向服务日志输出请求。
@@ -587,8 +828,50 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
     let timer: NodeJS.Timeout;
     try {
       return await new Promise((resolve, reject) => {
-        timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
-        worker.on('message', (data) => {
+        let remaining = timeoutMs;
+        let resumedAt = Date.now();
+        let paused = false;
+        let timerPaused = false;
+        const armTimer = () => {
+          resumedAt = Date.now();
+          timer = setTimeout(() => reject(new Error('timeout')), remaining);
+        };
+        armTimer();
+        if (runID)
+          this.runActions.set(runID, (action) => {
+            if (action === 'discard') {
+              reject(new Error('discarded'));
+              return;
+            }
+            if (action === 'pause' && !paused) {
+              paused = true;
+              void onStatus?.('pausing').catch(reject);
+            } else if (action === 'resume' && paused) {
+              paused = false;
+              if (timerPaused) {
+                timerPaused = false;
+                armTimer();
+              }
+              void onStatus?.('running').catch(reject);
+            }
+            worker.postMessage({ action });
+          });
+        worker.on('message', async (data) => {
+          if (data.paused) {
+            if (data.auto) paused = true;
+            if (paused)
+              try {
+                if (!timerPaused) {
+                  timerPaused = true;
+                  remaining = Math.max(1, remaining - (Date.now() - resumedAt));
+                  clearTimeout(timer);
+                }
+                await onStatus?.('paused');
+              } catch (error) {
+                reject(error);
+              }
+            return;
+          }
           if (
             data.progress &&
             Number.isSafeInteger(data.progress.completed) &&
@@ -596,17 +879,23 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
             data.progress.completed >= 0 &&
             data.progress.total >= data.progress.completed
           ) {
-            onProgress?.(data.progress);
+            try {
+              await onProgress?.(data.progress);
+              worker.postMessage({ action: 'ack' });
+            } catch (error) {
+              reject(error);
+            }
             return;
           }
           if (data.result) resolve(data.result);
-          else reject(new Error(data.error));
+          else reject(new Error(data.error, { cause: data.details }));
         });
         worker.once('error', reject);
         worker.once('exit', () => reject(new Error('runner_error')));
       });
     } finally {
       clearTimeout(timer);
+      if (runID) this.runActions.delete(runID);
       await worker.terminate();
       this.workers.delete(worker);
     }

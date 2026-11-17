@@ -59,6 +59,28 @@
         ].some((label) => labels.includes(label))
     )
   const pause = () => new Promise((resolve) => setTimeout(resolve, 150))
+  const apple = /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform)
+  const saveShortcut = (saveAs = false) =>
+    document.body.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "s", code: "KeyS", metaKey: apple, ctrlKey: !apple,
+      shiftKey: saveAs, bubbles: true, cancelable: true,
+    }))
+  const saveAtRoot = async (name) => {
+    saveShortcut(true)
+    const dialog = await until(() => document.querySelector("[role='dialog']"))
+    const input = await until(() => dialog.querySelector("input"))
+    input.value = name
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+    ;(await until(() => named(dialog, ["Save", "保存"]))).click()
+    await until(() => !document.querySelector("[role='dialog']"))
+    await until(async () => (await store("restCollections"))?.some(
+      (folder) => folder.requests.some((request) => request.name === name)
+    ))
+    saveShortcut()
+    await pause()
+    if (document.querySelector("[role='dialog']"))
+      throw new Error("Saving an existing request reopened Save As")
+  }
   async function until(callback) {
     const end = Date.now() + 25000
     while (Date.now() < end) {
@@ -78,6 +100,26 @@
   }
   try {
     await until(() => document.querySelector(".collection-tree"))
+    if (window.__workbenchSmoke.saveOnly) {
+      await until(() => document.querySelector("#send"))
+      if (!window.__workbenchSmoke.restart) {
+        stage = "first save at root in an empty workspace"
+        await saveAtRoot("首次保存验收")
+      } else {
+        stage = "restoring first saved request"
+        await until(() => collectionName("首次保存验收"))
+      }
+      await invoke("workbench_smoke_finish", { passed: true })
+      return
+    }
+    if (!window.__workbenchSmoke.restart) {
+      stage = "opening Save As in an empty workspace"
+      await until(() => document.querySelector("#send"))
+      saveShortcut()
+      const dialog = await until(() => document.querySelector("[role='dialog']"))
+      ;(await until(() => named(dialog, ["Cancel", "取消"]))).click()
+      await until(() => !document.querySelector("[role='dialog']"))
+    }
     if (localStorage.getItem("collections") !== "[]")
       throw new Error("Native boot imported old WebView storage")
     stage = "capture settings removed"
@@ -551,8 +593,10 @@
     }
 
     if (!window.__workbenchSmoke.restart) {
-      stage = "protocol menu WebSocket"
       await nav("/")
+      stage = "saving REST request at root"
+      await saveAtRoot("REST 保存验收")
+      stage = "protocol menu WebSocket"
       const selectProtocol = async (name) => {
         const trigger = await until(() =>
           named(document, ["切换协议", "Switch protocol"])
@@ -621,6 +665,8 @@
       await until(() =>
         document.body.textContent.includes("native-workbench-graphql")
       )
+      stage = "saving GraphQL request with response at root"
+      await saveAtRoot("GraphQL 保存验收")
       // 标签编辑使用延迟落盘，确认查询已保存后才能退出并验收重启恢复。
       await until(async () =>
         (await store("restTabs"))?.orderedDocs?.some(({ doc }) =>

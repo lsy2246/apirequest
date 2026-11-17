@@ -186,6 +186,7 @@ def main():
     executable = Path(sys.argv[1]).resolve(strict=True)
     capture_only = "--capture-only" in sys.argv[2:]
     mock_only = "--mock-only" in sys.argv[2:]
+    save_only = "--save-only" in sys.argv[2:]
     # 隔离测试存储和监听端口，重启时复用同一份测试数据。
     with tempfile.TemporaryDirectory(prefix="apirequest-native-") as directory:
         stopped = threading.Event()
@@ -202,7 +203,9 @@ def main():
                     env["APIREQUEST_NATIVE_CAPTURE_SMOKE"] = "1"
                 if mock_only:
                     env["APIREQUEST_NATIVE_MOCK_SMOKE"] = "1"
-                client = None if capture_only or mock_only else clients.submit(exercise_mcp, Path(directory), env["APIREQUEST_NATIVE_SMOKE_TARGET"], stopped)
+                if save_only:
+                    env["APIREQUEST_NATIVE_SAVE_SMOKE"] = "1"
+                client = None if capture_only or mock_only or save_only else clients.submit(exercise_mcp, Path(directory), env["APIREQUEST_NATIVE_SMOKE_TARGET"], stopped)
                 for restart in (False, True):
                     if restart:
                         env["APIREQUEST_NATIVE_SMOKE_RESTART"] = "1"

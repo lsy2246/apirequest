@@ -1,5 +1,5 @@
 import { HoppCollection } from "@apirequest/data";
-import { HoppEnvPair, HoppEnvs } from "./request";
+import { HoppEnvPair, HoppEnvs, RequestReport } from "./request";
 
 export type CollectionRunnerParam = {
   collections: HoppCollection[];
@@ -11,7 +11,13 @@ export type CollectionRunnerParam = {
   stopOnError?: boolean;
   foldersFirst?: boolean;
   keepVariableValues?: boolean;
-  onRequestComplete?: () => void;
+  resumeResults?: RequestReport[];
+  initialEnvs?: HoppEnvs;
+  beforeRequest?: (entry?: {
+    name: string;
+    iteration: number;
+  }) => Promise<void>;
+  onRequestComplete?: (report: RequestReport) => void | Promise<void>;
 };
 
 export type HoppCollectionFileExt = "json";

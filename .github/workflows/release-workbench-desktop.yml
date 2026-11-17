@@ -80,6 +80,7 @@ jobs:
           node --check desktop/src-tauri/tests/mock-smoke.js
           cargo build --locked --manifest-path desktop/src-tauri/Cargo.toml
           python desktop/src-tauri/tests/smoke.py "$NATIVE_EXECUTABLE" --capture-only
+          python desktop/src-tauri/tests/smoke.py "$NATIVE_EXECUTABLE" --save-only
           python desktop/src-tauri/tests/smoke.py "$NATIVE_EXECUTABLE"
       - name: Package installer
         working-directory: desktop

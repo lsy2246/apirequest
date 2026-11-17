@@ -1,16 +1,16 @@
-import { getDefaultGQLRequest } from "@apirequest/data";
-import { type HoppWSRequest } from "~/helpers/types/websocket";
-import { Container } from "dioc";
-import { computed, ref, readonly, type Ref } from "vue";
-import { cloneDeep } from "lodash-es";
-import type { HoppGQLRequest, HoppRESTRequest } from "@apirequest/data";
-import { getDefaultRESTRequest } from "~/helpers/rest/default";
-import { HoppTabSaveContext, HoppTabDocument } from "~/helpers/tab/document";
-import { getService } from "~/modules/dioc";
-import { PersistenceService, STORE_KEYS } from "../persistence";
-import type { Workspace } from "../workspace.service";
-import { TabService } from "./tab";
-import { HoppTab, PersistableTabState, ProtocolDrafts } from ".";
+import { getDefaultGQLRequest } from "@apirequest/data"
+import { type HoppWSRequest } from "~/helpers/types/websocket"
+import { Container } from "dioc"
+import { computed, ref, readonly, type Ref } from "vue"
+import { cloneDeep } from "lodash-es"
+import type { HoppGQLRequest, HoppRESTRequest } from "@apirequest/data"
+import { getDefaultRESTRequest } from "~/helpers/rest/default"
+import { HoppTabSaveContext, HoppTabDocument } from "~/helpers/tab/document"
+import { getService } from "~/modules/dioc"
+import { PersistenceService, STORE_KEYS } from "../persistence"
+import type { Workspace } from "../workspace.service"
+import { TabService } from "./tab"
+import { HoppTab, PersistableTabState, ProtocolDrafts } from "."
 export type { ProtocolDrafts }
 /**
  * Tab service for the unified workspace tab system.
@@ -236,13 +236,17 @@ export class WorkspaceTabsService extends TabService<HoppTabDocument, true> {
           tabID: tab.id,
           doc: {
             ...tab.document,
+            // Recovery snapshots live in the report store, outside localStorage's tab quota.
+            recovery: undefined,
+            runError: undefined,
             // The debounced persist fires during a run, so a tab killed
             // mid-run would restore as "running". Normalize to "stopped",
             // never "idle" — an idle runner tab auto-runs on mount.
-            status:
-              tab.document.status === "running"
-                ? ("stopped" as const)
-                : tab.document.status,
+            status: ["running", "pausing", "paused"].includes(
+              tab.document.status
+            )
+              ? ("stopped" as const)
+              : tab.document.status,
             request: null,
             response: null,
             // Drop the run outright rather than half of it: an iteration

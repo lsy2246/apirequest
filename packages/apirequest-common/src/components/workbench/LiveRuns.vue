@@ -54,7 +54,9 @@ const runs = ref<
   }[]
 >([])
 const activeRuns = computed(() =>
-  runs.value.filter((run) => run.status === "running")
+  runs.value.filter((run) =>
+    ["running", "pausing", "paused"].includes(run.status)
+  )
 )
 const error = ref(false)
 const controller = new AbortController()

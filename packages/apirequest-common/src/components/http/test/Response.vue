@@ -27,8 +27,24 @@
     >
       {{ t("workbench.report_body_truncated") }}
     </p>
+    <pre
+      v-if="
+        doc.reportResponse?.errorDetails?.length ||
+        doc.testResults?.scriptErrorDetails
+      "
+      data-testid="request-error-details"
+      class="whitespace-pre-wrap break-words border-b border-divider p-3 text-red-500"
+      >{{
+        JSON.stringify(
+          doc.reportResponse?.errorDetails?.length
+            ? doc.reportResponse.errorDetails
+            : doc.testResults?.scriptErrorDetails,
+          null,
+          2
+        )
+      }}</pre>
     <HttpResponseMeta
-      v-else
+      v-if="!doc.reportResponse?.response?.bodyTruncated"
       :response="doc.response"
       :is-embed="false"
       :is-loading="loading"
