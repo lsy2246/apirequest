@@ -66,6 +66,28 @@ const report: WorkbenchReport = {
   ],
 }
 describe("saved report in the collection runner", () => {
+  it("keeps omitted responses distinct from transport failures", () => {
+    const tab = savedReportTab({
+      ...report,
+      steps: [
+        {
+          name: "No saved body",
+          passed: true,
+          errors: [],
+          statusCode: 200,
+          responseOmitted: true,
+          detailsRecorded: true,
+        },
+      ],
+    })
+    expect(tab.document.request?.response).toBeNull()
+    expect(tab.document.request?.reportResponse).toMatchObject({
+      type: "success",
+      responseOmitted: true,
+      statusCode: 200,
+    })
+    expect(requestFailed(tab.document.request!)).toBe(false)
+  })
   it("restores iterations, selected response, request metadata, assertions and request timing from the same snapshot", () => {
     const before = JSON.stringify(report)
     const tab = savedReportTab(report),

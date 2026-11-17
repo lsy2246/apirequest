@@ -2888,11 +2888,14 @@
     }
   },
   "workbench_schedule": {
+    "keep_variable_values_notice": "When enabled, each iteration retains values changed by scripts in the previous iteration. Background runs do not write back to the debugging environment.",
+    "keep_variable_values": "Keep variable values between iterations",
+    "target_missing": "The original run target is unavailable. Select a group or request.",
     "settings": "Settings",
     "saved": "Settings saved",
     "invalid_config": "Iterations must be an integer from 1 to 1000, and delay an integer from 0 to 60000 ms.",
     "title": "Schedule",
-    "new": "New scheduled plan",
+    "new": "New test plan",
     "rule": "Schedule rule",
     "off": "Off",
     "interval": "At regular intervals",

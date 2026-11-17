@@ -40,6 +40,8 @@ export type RequestReport = {
   result: boolean;
   duration: { test: number; request: number; preRequest: number };
   requestElapsedMs?: number;
+  statusCode?: number;
+  responseOmitted?: boolean;
   response?: ReturnType<typeof import("../utils/report").reportResponse>;
 };
 

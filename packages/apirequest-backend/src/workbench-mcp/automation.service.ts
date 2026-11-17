@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import * as E from 'fp-ts/Either';
+import { getAutomationConfig } from '@apirequest/data';
 import { LOCAL_WORKSPACE_UID } from 'src/auth/local-workspace/policy';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CollectionFolder } from 'src/types/CollectionFolder';
@@ -35,6 +36,7 @@ type Schedule = {
   planID: string;
   environmentID: string | null;
   rule: Rule | null;
+  draftRule?: Rule | null;
   overrides: { key: string; secret: boolean; value: string }[];
   nextRunAt: number | null;
   leaseUntil?: number;
@@ -240,9 +242,9 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
       where: { ownerUid, kind: scheduleKind },
     });
     return rows.map(({ value }) => {
-      const { planID, environmentID, rule, nextRunAt } =
+      const { planID, environmentID, rule, draftRule, nextRunAt } =
         decode<Schedule>(value);
-      return { planID, environmentID, rule, nextRunAt };
+      return { planID, environmentID, rule, draftRule, nextRunAt };
     });
   }
 
@@ -304,6 +306,8 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
     if (input.config !== undefined)
       validateData('automation', { config: input.config }, true);
     const rule = parseRule(input.rule);
+    const draftRule =
+      input.draftRule === undefined ? undefined : parseRule(input.draftRule);
     const environmentID = input.environmentID;
     if (
       environmentID !== null &&
@@ -317,7 +321,7 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
           where: { id: environmentID, userUid: ownerUid, isGlobal: false },
         })
       : null;
-    if ((rule || input.config !== undefined) && environmentID && !env)
+    if (environmentID && !env)
       throw new NotFoundException('Environment not found');
 
     const overrides: Schedule['overrides'] = [];
@@ -346,15 +350,14 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
       }
     }
 
-    const nextRunAt = rule ? nextRun(rule, Date.now()) : null;
-    if (!planID) {
-      const requestID = input.requestID;
-      const collectionID = input.collectionID;
-      if (!rule || (requestID === undefined) === (collectionID === undefined)) {
-        throw new BadRequestException(
-          'A group or request and a schedule are required',
-        );
-      }
+    const requestID = input.requestID;
+    const collectionID = input.collectionID;
+    const hasTarget = requestID !== undefined || collectionID !== undefined;
+    let target:
+      { id: string; title: string; collectionID?: string } | undefined;
+    if (!planID || hasTarget) {
+      if ((requestID === undefined) === (collectionID === undefined))
+        throw new BadRequestException('A group or request is required');
       if (
         requestID !== undefined &&
         (typeof requestID !== 'string' || !requestID)
@@ -365,7 +368,7 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
         (typeof collectionID !== 'string' || !collectionID)
       )
         throw new BadRequestException('Invalid collection');
-      const target =
+      target =
         requestID !== undefined
           ? await this.domain.get('request', requestID as string, ownerUid)
           : await this.domain.get(
@@ -373,6 +376,16 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
               collectionID as string,
               ownerUid,
             );
+    }
+    const nextRunAt = rule ? nextRun(rule, Date.now()) : null;
+    const targetFields = target
+      ? {
+          collectionID:
+            requestID !== undefined ? target.collectionID : target.id,
+          requestID,
+        }
+      : {};
+    if (!planID) {
       const id = randomUUID();
       await this.prisma.$transaction([
         this.prisma.workbenchConfig.create({
@@ -382,11 +395,9 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
             kind: 'automation',
             value: encode({
               name: target.title,
-              collectionID:
-                requestID !== undefined ? target.collectionID : target.id,
-              requestID,
+              ...targetFields,
               environmentID,
-              config: { iterations: 1, delay: 0, ...Object(input.config) },
+              config: getAutomationConfig(input.config),
             }),
           },
         }),
@@ -399,6 +410,7 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
               planID: id,
               environmentID,
               rule,
+              draftRule: rule ?? draftRule ?? null,
               overrides,
               nextRunAt,
             }),
@@ -417,35 +429,42 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
         data: { revision: { increment: 0 } },
       });
       if (!count) throw new NotFoundException('Configuration not found');
-      if (input.config !== undefined) {
-        const plan = await tx.workbenchConfig.findFirst({
-          where: { id: planID, ownerUid, kind: 'automation' },
-        });
-        const before = decode<Record<string, unknown>>(plan.value);
-        await tx.workbenchConfig.updateMany({
-          where: { id: planID, ownerUid, kind: 'automation' },
-          data: {
-            value: encode({
-              ...before,
-              environmentID,
-              config: { ...Object(before.config), ...Object(input.config) },
-            }),
-            revision: { increment: 1 },
-          },
-        });
-      }
+      const plan = await tx.workbenchConfig.findFirst({
+        where: { id: planID, ownerUid, kind: 'automation' },
+      });
+      const before = decode<Record<string, unknown>>(plan.value);
+      await tx.workbenchConfig.updateMany({
+        where: { id: planID, ownerUid, kind: 'automation' },
+        data: {
+          value: encode({
+            ...before,
+            ...targetFields,
+            environmentID,
+            ...(input.config !== undefined
+              ? {
+                  config: getAutomationConfig({
+                    ...Object(before.config),
+                    ...Object(input.config),
+                  }),
+                }
+              : {}),
+          }),
+          revision: { increment: 1 },
+        },
+      });
       const id = `${planID}:schedule`;
       const where = { id, ownerUid, kind: scheduleKind };
       const current = await tx.workbenchConfig.findFirst({ where });
+      const previous = current ? decode<Schedule>(current.value) : undefined;
       const value = encode({
         planID,
         environmentID,
         rule,
+        draftRule:
+          rule ?? draftRule ?? previous?.draftRule ?? previous?.rule ?? null,
         overrides,
         nextRunAt,
-        leaseUntil: current
-          ? decode<Schedule>(current.value).leaseUntil
-          : undefined,
+        leaseUntil: previous?.leaseUntil,
       });
       if (current) {
         const { count: updated } = await tx.workbenchConfig.updateMany({

@@ -2,31 +2,17 @@
   <HoppSmartModal
     v-if="!autoRun || collectionLoadFailed || autoRunFailed"
     dialog
-    :title="
-      settingsPlan
-        ? `${t('workbench_schedule.settings')} · ${settingsPlan.name}`
-        : t('collection_runner.run_collection')
-    "
+    :title="t('collection_runner.run_collection')"
     :full-width-body="true"
-    :styles="
-      settingsPlan
-        ? 'sm:max-w-2xl'
-        : 'sm:max-w-6xl xl:max-w-7xl 2xl:max-w-[80vw]'
-    "
-    @close="!savingSettings && closeModal()"
+    styles="sm:max-w-6xl xl:max-w-7xl 2xl:max-w-[80vw]"
+    @close="closeModal()"
   >
     <template #body>
       <div
-        class="flex min-w-0 w-full flex-col bg-primary"
-        :class="{
-          'lg:flex-row lg:h-[calc(60vh_-_2.0625rem)] lg:min-h-0': !settingsPlan,
-        }"
-        :inert="savingSettings"
-        :aria-busy="savingSettings"
+        class="flex min-w-0 w-full flex-col bg-primary lg:flex-row lg:h-[calc(60vh_-_2.0625rem)] lg:min-h-0"
       >
         <div
-          class="flex-1 min-w-0 p-4 overflow-y-auto border-divider"
-          :class="{ 'lg:border-r': !settingsPlan }"
+          class="flex-1 min-w-0 p-4 overflow-y-auto border-divider lg:border-r"
         >
           <section>
             <h4 class="font-semibold text-secondaryDark">
@@ -66,7 +52,7 @@
             </div>
           </section>
 
-          <section v-if="!settingsPlan" class="mt-6">
+          <section class="mt-6">
             <h4 class="font-semibold text-secondaryDark">
               {{ t("collection_runner.data_feed") }}
             </h4>
@@ -192,7 +178,9 @@
               <WorkbenchToggle
                 class="pr-2"
                 :on="config.executeScripts !== false"
-                @change="config.executeScripts = config.executeScripts === false"
+                @change="
+                  config.executeScripts = config.executeScripts === false
+                "
               >
                 <span>
                   {{ t("collection_runner.execute_scripts") }}
@@ -200,29 +188,9 @@
               </WorkbenchToggle>
             </div>
           </section>
-          <section
-            v-if="settingsPlan"
-            class="mt-6 border-t border-divider pt-5"
-          >
-            <h4
-              v-if="schedulingAvailable"
-              class="mb-4 font-semibold text-secondaryDark"
-            >
-              {{ t("workbench_schedule.title") }}
-            </h4>
-            <AutomationScheduleEditor
-              ref="settingsEditor"
-              embedded
-              :plan="settingsPlan"
-              :schedule="schedule"
-            />
-          </section>
         </div>
 
-        <div
-          v-if="!settingsPlan"
-          class="flex flex-col flex-1 min-w-0 min-h-0 p-4"
-        >
+        <div class="flex flex-col flex-1 min-w-0 min-h-0 p-4">
           <div class="flex items-center justify-between flex-shrink-0">
             <h4 class="font-semibold text-secondaryDark">
               {{ t("collection_runner.run_sequence") }}
@@ -304,32 +272,21 @@
 
     <template #footer>
       <div class="flex space-x-2">
-        <HoppButtonSecondary
-          v-if="settingsPlan"
-          :label="t('action.save')"
-          :disabled="savingSettings || loadingCollection"
-          :loading="savingSettings"
-          outline
-          @click="saveSettings()"
-        />
         <HoppButtonPrimary
-          v-if="!settingsPlan"
           :label="t('test.run')"
           :disabled="
-            savingSettings ||
             config.delay < 0 ||
             config.iterations < 1 ||
             !collectionTree ||
             selectedRequestIDs.size === 0
           "
-          :loading="loadingCollection || savingSettings"
+          :loading="loadingCollection"
           :icon="IconPlay"
           outline
           @click="runTests"
         />
         <HoppButtonSecondary
           :label="`${t('action.close')}`"
-          :disabled="savingSettings"
           outline
           filled
           @click="closeModal"
@@ -432,12 +389,6 @@ import WorkbenchToggle from "~/components/workbench/Toggle.vue"
 import { useRouter } from "vue-router"
 import { computed, onMounted, ref } from "vue"
 import { useI18n } from "~/composables/i18n"
-import AutomationScheduleEditor from "~/components/workbench/AutomationSchedule.vue"
-import {
-  workbenchSchedulesAvailable,
-  type AutomationSchedule,
-  type SavedWorkbenchPlan,
-} from "~/helpers/workbench-mcp"
 
 import { HoppCollection } from "@apirequest/data"
 import { useService } from "dioc/vue"
@@ -463,9 +414,6 @@ const tabs = useService(WorkspaceTabsService)
 
 const loadingCollection = ref(false)
 const autoRunFailed = ref(false)
-const schedulingAvailable = workbenchSchedulesAvailable()
-const savingSettings = ref(false)
-const settingsEditor = ref<InstanceType<typeof AutomationScheduleEditor>>()
 
 export type CollectionRunnerData =
   | {
@@ -490,14 +438,11 @@ const props = defineProps<{
    */
   prevSelection?: string[]
   initialSelection?: string[]
-  settingsPlan?: SavedWorkbenchPlan
-  schedule?: AutomationSchedule
   autoRun?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: "hide-modal"): void
-  (e: "settings-saved"): void
 }>()
 
 const showDataPreview = ref(false)
@@ -558,42 +503,6 @@ const config = ref<TestRunnerConfig>({
   keepVariableValues: true,
   executeScripts: true,
 })
-const saveSettings = async () => {
-  if (!props.settingsPlan || savingSettings.value || !settingsEditor.value)
-    return false
-  const iterations = Number(config.value.iterations)
-  const delay = Number(config.value.delay)
-  if (
-    !Number.isSafeInteger(iterations) ||
-    iterations < 1 ||
-    iterations > 1000 ||
-    !Number.isSafeInteger(delay) ||
-    delay < 0 ||
-    delay > 60000
-  ) {
-    toast.error(t("workbench_schedule.invalid_config"))
-    return false
-  }
-  savingSettings.value = true
-  try {
-    const saved = await settingsEditor.value.save({
-      iterations,
-      delay,
-      stopOnError: config.value.stopOnError,
-      persistResponses: config.value.persistResponses,
-      keepVariableValues: config.value.keepVariableValues,
-      executeScripts: config.value.executeScripts !== false,
-    })
-    if (saved) {
-      emit("settings-saved")
-      toast.success(t("workbench_schedule.saved"))
-    }
-    return saved
-  } finally {
-    savingSettings.value = false
-  }
-}
-
 // Cap the data-preview so a large dataset doesn't stringify thousands of rows
 // into the DOM on every render. Computed once, and only while the preview is open.
 const DATASET_PREVIEW_ROW_CAP = 50
@@ -671,7 +580,6 @@ onMounted(async () => {
     config.value = { ...config.value, ...props.prevConfig }
   }
 
-  if (props.settingsPlan) return
   await loadCollectionTree()
   if (props.autoRun && collectionTree.value && !(await runTests()))
     autoRunFailed.value = true
@@ -747,7 +655,6 @@ const handleDatasetFile = async (event: Event) => {
 
 const router = useRouter()
 const runTests = async () => {
-  if (savingSettings.value) return
   const iterations = Number(config.value.iterations)
   const delay = Number(config.value.delay)
 

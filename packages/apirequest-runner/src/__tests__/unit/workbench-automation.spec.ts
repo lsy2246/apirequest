@@ -5,7 +5,10 @@ vi.mock("../../utils/collections", () => ({
   collectionsRunner: vi.fn(async () => []),
 }));
 
-import { runWorkbenchAutomation } from "../../workbench";
+import {
+  runWorkbenchAutomation,
+  type WorkbenchRecovery,
+} from "../../workbench";
 
 describe("runWorkbenchAutomation", () => {
   it("disables scripts at every collection and request level without mutating the saved tree", async () => {
@@ -115,5 +118,62 @@ describe("runWorkbenchAutomation", () => {
     });
     expect(report.summary.failed).toBe(1);
     expect(report.steps.map((step) => step.passed)).toEqual([true, false]);
+  });
+
+  it("omits responses from progress, checkpoints and final reports without losing HTTP failure status", async () => {
+    const request = {
+      path: "fixture/failure",
+      result: true,
+      errors: [],
+      tests: [],
+      iteration: 1,
+      duration: { request: 0.01, test: 0, preRequest: 0 },
+      response: {
+        statusCode: 503,
+        statusText: "Unavailable",
+        headers: [{ key: "test", value: "private-header" }],
+        body: "private-body",
+      },
+    };
+    vi.mocked(collectionsRunner).mockImplementationOnce(async (options) => {
+      const report = structuredClone(request);
+      await options.onRequestComplete?.(report);
+      await options.beforeRequest?.({ name: "next", iteration: 1 });
+      return [report];
+    });
+    const checkpoints: WorkbenchRecovery[] = [];
+    const pause = vi.fn(async () => {});
+    const result = await runWorkbenchAutomation(
+      {
+        collection: {
+          id: "fixture",
+          name: "Fixture",
+          data: null,
+          requests: [],
+          folders: [],
+        },
+        envs: { selected: [], global: [] },
+        config: { persistResponses: false, stopOnError: true },
+      },
+      (progress) => {
+        checkpoints.push(structuredClone(progress.recovery!));
+      },
+      pause
+    );
+    expect(result.summary.failed).toBe(1);
+    expect(result.steps[0]).toMatchObject({
+      passed: false,
+      statusCode: 503,
+      responseOmitted: true,
+    });
+    expect(result.steps[0].response).toBeUndefined();
+    expect(pause).toHaveBeenCalledWith(true);
+    expect(checkpoints.at(-1)!.results[0]).toMatchObject({
+      statusCode: 503,
+      responseOmitted: true,
+    });
+    expect(JSON.stringify(checkpoints)).not.toContain("private-body");
+    expect(JSON.stringify(checkpoints)).not.toContain("private-header");
+    expect(request.response.body).toBe("private-body");
   });
 });

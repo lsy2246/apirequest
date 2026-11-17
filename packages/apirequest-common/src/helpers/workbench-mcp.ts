@@ -1,4 +1,5 @@
-import { platform } from "~/platform";
+import type { AutomationConfig } from "@apirequest/data"
+import { platform } from "~/platform"
 
 export type McpProposal = {
   id: string
@@ -25,18 +26,12 @@ export type SavedWorkbenchPlan = {
   collectionID?: string
   requestID?: string
   environmentID?: string
-  config?: {
+  config?: Partial<AutomationConfig> & {
     mode?: "requests" | "duration"
     concurrency?: number
     requests?: number
     durationSeconds?: number
     timeoutMs?: number
-    iterations?: number
-    delay?: number
-    stopOnError?: boolean
-    persistResponses?: boolean
-    keepVariableValues?: boolean
-    executeScripts?: boolean
   }
   url?: string
   protocols?: string[]
@@ -51,6 +46,7 @@ export type AutomationSchedule = {
   planID: string
   environmentID: string | null
   rule: AutomationScheduleRule | null
+  draftRule?: AutomationScheduleRule | null
   nextRunAt: number | null
 }
 

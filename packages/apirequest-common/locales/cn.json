@@ -2888,11 +2888,14 @@
     }
   },
   "workbench_schedule": {
+    "keep_variable_values_notice": "开启后，下一轮沿用上一轮脚本修改的变量值；后台执行不会写回调试环境。",
+    "keep_variable_values": "在轮次间保留变量值",
+    "target_missing": "原执行对象已不可用，请重新选择分组或请求。",
     "settings": "设置",
     "saved": "设置已保存",
     "invalid_config": "迭代次数须为 1–1000 的整数，延迟须为 0–60000 毫秒的整数。",
     "title": "定时设置",
-    "new": "新建定时计划",
+    "new": "新建测试计划",
     "rule": "定时规则",
     "off": "关闭定时",
     "interval": "固定间隔",

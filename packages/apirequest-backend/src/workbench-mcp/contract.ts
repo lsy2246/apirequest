@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { AutomationConfigSchema } from '@apirequest/data';
 import { createHash, randomUUID } from 'crypto';
 
 export const ENTITIES = [
@@ -286,43 +287,13 @@ export function validateData(
         throw new BadRequestException(`Invalid ${k}`);
   }
   if (kind === 'automation' && value.config !== undefined) {
-    object(value.config);
     if (
-      Object.keys(value.config).some(
-        (k) =>
-          ![
-            'iterations',
-            'delay',
-            'stopOnError',
-            'persistResponses',
-            'keepVariableValues',
-            'executeScripts',
-          ].includes(k),
-      )
+      !AutomationConfigSchema.partial().safeParse(value.config).success ||
+      (!partial &&
+        (value.config.iterations === undefined ||
+          value.config.delay === undefined))
     )
-      throw new BadRequestException('Unknown automation setting');
-    for (const key of [
-      'stopOnError',
-      'persistResponses',
-      'keepVariableValues',
-      'executeScripts',
-    ])
-      if (
-        value.config[key] !== undefined &&
-        typeof value.config[key] !== 'boolean'
-      )
-        throw new BadRequestException(`Invalid ${key}`);
-    if (
-      ((!partial || value.config.iterations !== undefined) &&
-        (!Number.isSafeInteger(value.config.iterations) ||
-          value.config.iterations < 1 ||
-          value.config.iterations > 1000)) ||
-      ((!partial || value.config.delay !== undefined) &&
-        (!Number.isSafeInteger(value.config.delay) ||
-          value.config.delay < 0 ||
-          value.config.delay > 60000))
-    )
-      throw new BadRequestException('Invalid automation iterations or delay');
+      throw new BadRequestException('Invalid automation settings');
   }
   if (
     kind === 'websocket' &&

@@ -102,7 +102,8 @@ export function savedReportTab(
               }
             : null,
       reportResponse: {
-        type: step.response ? "success" : "network_fail",
+        type:
+          step.response || step.responseOmitted ? "success" : "network_fail",
         detailsRecorded: step.detailsRecorded === true,
         response: step.response,
         responseOmitted: step.responseOmitted === true,

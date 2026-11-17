@@ -1,7 +1,7 @@
 <template>
   <section class="workbench-panel mb-6 p-5">
     <div
-      v-if="!hideHeading || scheduling"
+      v-if="!hideHeading || managePlans"
       class="mb-3 flex flex-wrap items-center gap-3"
       :class="{ 'justify-end': hideHeading }"
     >
@@ -10,13 +10,15 @@
         {{ t(`workbench_mcp.entities.${kind}`) }}
       </h2>
       <HoppButtonSecondary
-        v-if="scheduling"
+        v-if="managePlans"
         :label="t('workbench_schedule.new')"
         :disabled="
           loading ||
           !entries.some(
             ({ collection }) =>
-              collection.id || collection.requests.some(({ id }) => id)
+              collection.id ||
+              (!automationScheduling && collection._ref_id) ||
+              collection.requests.some(({ id }) => id)
           )
         "
         @click="scheduleEditor = {}"
@@ -127,12 +129,7 @@
       :collection-runner-data="runner"
       :prev-config="selected.config"
       :initial-selection="runnerSelection"
-      :settings-plan="
-        kind === 'automation' && !runImmediately ? selected : undefined
-      "
       :auto-run="runImmediately"
-      :schedule="schedules[selected.id]"
-      @settings-saved="refresh"
       @hide-modal="closeRunner"
     />
     <HoppSmartModal
@@ -159,7 +156,7 @@ import { useService } from "dioc/vue"
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
 import IconWorkflow from "~icons/lucide/workflow"
 import { useRouter } from "vue-router"
-import type { HoppRESTRequest } from "@apirequest/data"
+import { getAutomationConfig, type HoppRESTRequest } from "@apirequest/data"
 import { useI18n } from "~/composables/i18n"
 import { useWorkbenchCollections } from "~/composables/workbenchCollections"
 import {
@@ -198,6 +195,7 @@ const plans = ref<SavedWorkbenchPlan[]>([]),
 const automationScheduling =
   props.kind === "automation" && workbenchSchedulesAvailable()
 const scheduling = automationScheduling && props.allowScheduling
+const managePlans = props.kind === "automation" && props.allowScheduling
 const schedules = ref<Record<string, AutomationSchedule>>({})
 const scheduleEditor = ref<{ plan?: SavedWorkbenchPlan }>()
 const deleteTarget = ref<SavedWorkbenchPlan>()
@@ -280,6 +278,11 @@ const load = async (plan: SavedWorkbenchPlan, immediately = false) => {
       controller.signal
     )
     if (!alive) return
+    if (props.kind === "automation" && !immediately) {
+      if (automationScheduling) await refreshSchedules()
+      if (alive) scheduleEditor.value = { plan: current }
+      return
+    }
     if (current.environmentID) {
       const index = environmentsStore.value.environments.findIndex(
         (env) => env.id === current.environmentID
@@ -289,17 +292,30 @@ const load = async (plan: SavedWorkbenchPlan, immediately = false) => {
     } else if (props.kind === "automation") {
       setSelectedEnvironmentIndex({ type: "NO_ENV_SELECTED" })
     }
-    selected.value = current
+    selected.value =
+      props.kind === "automation"
+        ? {
+            ...current,
+            config: getAutomationConfig(
+              current.config,
+              automationScheduling
+                ? {}
+                : { delay: 500, keepVariableValues: true }
+            ),
+          }
+        : current
     if (props.kind === "automation") {
       const entry = entries.value.find(({ collection }) =>
         current.requestID
-          ? collection.requests.some(({ id }) => id === current.requestID)
+          ? collection.requests.some(
+              ({ id, _ref_id }) => (id ?? _ref_id) === current.requestID
+            )
           : (collection.id ?? collection._ref_id) === current.collectionID
       )
       if (current.requestID) {
         const index =
           entry?.collection.requests.findIndex(
-            ({ id }) => id === current.requestID
+            ({ id, _ref_id }) => (id ?? _ref_id) === current.requestID
           ) ?? -1
         if (!entry || index < 0)
           throw new Error(t("workbench_schedule.request_missing"))

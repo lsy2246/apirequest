@@ -4,6 +4,7 @@ import {
   applyConfig,
   configurations,
   prepareChange,
+  newConfigID,
 } from "../native-workbench-config"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
@@ -67,5 +68,45 @@ describe("native automation settings", () => {
       nativeMcpAPI("configs/automation/plan", undefined)
     ).resolves.toEqual(before)
     expect(applyConfig).not.toHaveBeenCalled()
+  })
+
+  it("creates a local plan using the existing validated configuration service", async () => {
+    vi.mocked(configurations).mockImplementation(async (entity) =>
+      entity === "collection"
+        ? [{ id: "collection", data: { id: "collection", name: "Suite" } }]
+        : []
+    )
+    vi.mocked(newConfigID).mockReturnValue("new-plan")
+    await nativeMcpAPI("configs/automation", {
+      collectionID: "collection",
+      requestID: null,
+      config: { iterations: 2, delay: 0 },
+    })
+    expect(prepareChange).toHaveBeenCalledWith({
+      entity: "automation",
+      operation: "create",
+      id: "new-plan",
+      data: {
+        name: "Suite",
+        collectionID: "collection",
+        requestID: undefined,
+        config: { iterations: 2, delay: 0 },
+      },
+    })
+    expect(applyConfig).toHaveBeenCalledOnce()
+  })
+
+  it("clears the previous request when changing the target to a group", async () => {
+    await nativeMcpAPI("configs/automation/plan", {
+      collectionID: "group",
+      requestID: null,
+      config: {},
+    })
+    expect(prepareChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { collectionID: "group", requestID: undefined, config: {} },
+      }),
+      before
+    )
   })
 })

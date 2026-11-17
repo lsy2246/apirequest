@@ -3,6 +3,8 @@ import {
   makeCollection,
   HoppGQLRequest,
   HoppRESTRequest,
+  getAutomationConfig,
+  type AutomationConfig,
 } from "@apirequest/data";
 import { HoppEnvs, RequestReport } from "./types/request";
 import { collectionsRunner } from "./utils/collections";
@@ -49,13 +51,7 @@ export type WorkbenchRecovery = {
   input: {
     collection: CollectionTree;
     envs: HoppEnvs;
-    config: {
-      iterations?: number;
-      delay?: number;
-      stopOnError?: boolean;
-      keepVariableValues?: boolean;
-      executeScripts?: boolean;
-    };
+    config: Partial<AutomationConfig>;
   };
   envs: HoppEnvs;
   results: RequestReport[];
@@ -84,22 +80,25 @@ export async function runWorkbenchAutomation(
     recovery?: WorkbenchRecovery;
     collection: CollectionTree;
     envs: HoppEnvs;
-    config: {
-      iterations?: number;
-      delay?: number;
-      stopOnError?: boolean;
-      keepVariableValues?: boolean;
-      executeScripts?: boolean;
-    };
+    config: Partial<AutomationConfig>;
   },
   onProgress?: (progress: WorkbenchAutomationProgress) => void | Promise<void>,
   beforeRequest?: (pauseForError?: boolean) => Promise<void>
 ) {
   const started = Date.now();
+  const config = getAutomationConfig(input.config);
+  const retainResponse = (report: RequestReport) => {
+    if (!config.persistResponses) {
+      report.statusCode = report.response?.statusCode ?? report.statusCode;
+      report.responseOmitted = !!report.response || report.responseOmitted;
+      delete report.response;
+    }
+    return report;
+  };
   const count = (tree: CollectionTree): number =>
     tree.requests.length +
     tree.folders.reduce((sum, folder) => sum + count(folder), 0);
-  const total = count(input.collection) * (input.config.iterations ?? 1);
+  const total = count(input.collection) * config.iterations;
   const recovery: WorkbenchRecovery = input.recovery
     ? snapshot(input.recovery)
     : {
@@ -108,6 +107,7 @@ export async function runWorkbenchAutomation(
         envs: snapshot(input.envs),
         results: [],
       };
+  recovery.results.forEach(retainResponse);
   const envs = snapshot(recovery.envs);
   let completed = recovery.results.length;
   const partial: RequestReport[] = [...recovery.results];
@@ -119,17 +119,15 @@ export async function runWorkbenchAutomation(
     recovery: snapshot(recovery),
   });
   const results = await collectionsRunner({
-    collections: [
-      fromTree(input.collection, input.config.executeScripts !== false),
-    ],
+    collections: [fromTree(input.collection, config.executeScripts)],
     envs,
     initialEnvs: recovery.input.envs,
     resumeResults: recovery.results,
-    delay: input.config.delay,
-    iterationCount: input.config.iterations,
-    stopOnError: beforeRequest ? false : input.config.stopOnError,
+    delay: config.delay,
+    iterationCount: config.iterations,
+    stopOnError: beforeRequest ? false : config.stopOnError,
     foldersFirst: true,
-    keepVariableValues: input.config.keepVariableValues ?? false,
+    keepVariableValues: config.keepVariableValues,
 
     beforeRequest: async (entry) => {
       await beforeRequest?.(pauseForError);
@@ -143,14 +141,15 @@ export async function runWorkbenchAutomation(
       });
     },
     onRequestComplete: async (report) => {
+      retainResponse(report);
       partial.push(report);
       recovery.results = [...partial];
       recovery.envs = snapshot(envs);
       recovery.inFlight = undefined;
       pauseForError =
-        input.config.stopOnError === true &&
+        config.stopOnError &&
         (!report.result ||
-          ((report.response?.statusCode ?? 0) >= 400 &&
+          ((report.statusCode ?? report.response?.statusCode ?? 0) >= 400 &&
             !report.tests.some((test) => test.passed + test.failed > 0)));
       await onProgress?.({
         completed: ++completed,
@@ -161,7 +160,7 @@ export async function runWorkbenchAutomation(
     },
   });
 
-  return automationResult(results, started);
+  return automationResult(results.map(retainResponse), started);
 }
 
 function automationResult(
@@ -182,7 +181,7 @@ function automationResult(
     passedTests += metrics.tests.passed;
     if (
       !result.result ||
-      ((result.response?.statusCode ?? 0) >= 400 &&
+      ((result.statusCode ?? result.response?.statusCode ?? 0) >= 400 &&
         metrics.tests.passed + metrics.tests.failed === 0)
     )
       failed++;
@@ -209,12 +208,13 @@ function automationResult(
       iteration: result.iteration,
       passed:
         result.result &&
-        ((result.response?.statusCode ?? 0) < 400 ||
+        ((result.statusCode ?? result.response?.statusCode ?? 0) < 400 ||
           result.tests.some((test) => test.passed + test.failed > 0)),
       detailsRecorded: true,
       elapsedMs: result.requestElapsedMs,
-      statusCode: result.response?.statusCode,
+      statusCode: result.statusCode ?? result.response?.statusCode,
       response: result.response,
+      responseOmitted: result.responseOmitted === true,
       errorDetails: result.errors.map((error) => ({
         code: error.code,
         data: reportError("data" in error ? error.data : error),

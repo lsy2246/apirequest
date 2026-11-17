@@ -1,4 +1,5 @@
 import { WorkbenchAutomationService } from './automation.service';
+import { getAutomationConfig } from '@apirequest/data';
 
 jest.mock('src/utils', () => ({
   encrypt: (value: string) => value,
@@ -15,6 +16,7 @@ function fixture() {
   const baseline = {
     name: 'Plan',
     collectionID: 'collection',
+    requestID: 'old-request',
     environmentID: null,
     config: { iterations: 1, delay: 0, persistResponses: true },
   };
@@ -32,15 +34,25 @@ function fixture() {
     },
   };
   const prisma = {
+    workbenchConfig: { create: jest.fn(async (row) => row) },
     userEnvironment: { findFirst: jest.fn().mockResolvedValue(null) },
-    $transaction: jest.fn(async (operation) => operation(tx)),
+    $transaction: jest.fn(async (operation) =>
+      Array.isArray(operation) ? Promise.all(operation) : operation(tx),
+    ),
+  };
+  const domain = {
+    get: jest.fn(async (kind, id) => ({
+      id,
+      title: 'New target',
+      collectionID: 'new-collection',
+    })),
   };
   const service = new WorkbenchAutomationService(
     prisma as any,
-    {} as any,
+    domain as any,
     {} as any,
   );
-  return { service, prisma, tx };
+  return { service, prisma, tx, domain };
 }
 
 describe('combined automation settings', () => {
@@ -65,6 +77,7 @@ describe('combined automation settings', () => {
     expect(JSON.parse(planWrite.data.value)).toEqual({
       name: 'Plan',
       collectionID: 'collection',
+      requestID: 'old-request',
       environmentID: null,
       config: {
         iterations: 3,
@@ -72,6 +85,7 @@ describe('combined automation settings', () => {
         stopOnError: true,
         persistResponses: true,
         keepVariableValues: false,
+        executeScripts: true,
       },
     });
     expect(
@@ -119,7 +133,137 @@ describe('combined automation settings', () => {
   it('keeps legacy schedule-only saves compatible', async () => {
     const { service, tx } = fixture();
     await service.save('owner', { environmentID: null, rule: null }, 'plan');
-    expect(tx.workbenchConfig.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.workbenchConfig.updateMany).toHaveBeenCalledTimes(2);
+    expect(
+      JSON.parse(tx.workbenchConfig.updateMany.mock.calls[1][0].data.value)
+        .config,
+    ).toEqual({ iterations: 1, delay: 0, persistResponses: true });
+  });
+
+  it('creates a manual plan with all shared defaults and no next run', async () => {
+    const { service, prisma, domain } = fixture();
+    const result = await service.save('owner', {
+      collectionID: 'collection',
+      environmentID: null,
+      rule: null,
+    });
+    expect(domain.get).toHaveBeenCalledWith(
+      'collection',
+      'collection',
+      'owner',
+    );
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    const writes = prisma.workbenchConfig.create.mock.calls.map(([row]) => ({
+      ...row.data,
+      value: JSON.parse(row.data.value),
+    }));
+    expect(writes[0].value).toEqual({
+      name: 'New target',
+      collectionID: 'collection',
+      environmentID: null,
+      config: getAutomationConfig(),
+    });
+    expect(writes[1].value).toMatchObject({
+      planID: result.planID,
+      rule: null,
+      nextRunAt: null,
+    });
+  });
+
+  it.each([{ requestID: 'new-request' }, { collectionID: 'new-group' }])(
+    'updates the target and clears a previous single request when selecting a group: %j',
+    async (target) => {
+      const { service, tx, domain } = fixture();
+      await service.save(
+        'owner',
+        {
+          ...target,
+          environmentID: null,
+          rule: null,
+          config: { iterations: 2 },
+        },
+        'plan',
+      );
+      expect(domain.get).toHaveBeenCalledWith(
+        'requestID' in target ? 'request' : 'collection',
+        Object.values(target)[0],
+        'owner',
+      );
+      const saved = JSON.parse(
+        tx.workbenchConfig.updateMany.mock.calls[1][0].data.value,
+      );
+      expect(saved.collectionID).toBe(
+        'requestID' in target ? 'new-collection' : 'new-group',
+      );
+      expect(saved.requestID).toBe(
+        'requestID' in target ? 'new-request' : undefined,
+      );
+      expect(saved.config.keepVariableValues).toBe(false);
+    },
+  );
+
+  it('rejects a foreign or missing target before writing', async () => {
+    const { service, prisma, domain } = fixture();
+    domain.get.mockRejectedValueOnce(new Error('Configuration not found'));
+    await expect(
+      service.save(
+        'owner',
+        { requestID: 'foreign', environmentID: null, rule: null },
+        'plan',
+      ),
+    ).rejects.toThrow('Configuration not found');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects ambiguous targets before writing', async () => {
+    const { service, prisma } = fixture();
+    await expect(
+      service.save(
+        'owner',
+        {
+          requestID: 'request',
+          collectionID: 'group',
+          environmentID: null,
+          rule: null,
+        },
+        'plan',
+      ),
+    ).rejects.toThrow('A group or request is required');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('preserves the schedule as a draft when turning off an existing plan', async () => {
+    const { service, tx } = fixture();
+    const rule = {
+      type: 'weekly',
+      weekday: 2,
+      time: '10:30',
+      timezone: 'Asia/Shanghai',
+    };
+    const find = tx.workbenchConfig.findFirst.getMockImplementation()!;
+    tx.workbenchConfig.findFirst.mockImplementation(async (args) =>
+      args.where.kind === 'automation_schedule'
+        ? {
+            revision: 1,
+            value: JSON.stringify({
+              planID: 'plan',
+              rule,
+              environmentID: null,
+              leaseUntil: 123,
+            }),
+          }
+        : find(args),
+    );
+    await service.save('owner', { environmentID: null, rule: null }, 'plan');
+    const saved = JSON.parse(
+      tx.workbenchConfig.updateMany.mock.calls.at(-1)![0].data.value,
+    );
+    expect(saved).toMatchObject({
+      rule: null,
+      draftRule: rule,
+      nextRunAt: null,
+      leaseUntil: 123,
+    });
   });
 
   it('does not create a schedule for a missing plan', async () => {

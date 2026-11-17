@@ -1,9 +1,20 @@
-import { invoke } from "@tauri-apps/api/core";
-import { notifyWorkbenchChange } from "~/services/workbench-realtime.service";
-import { listen } from "@tauri-apps/api/event";
-import { isEqual } from "lodash-es";
-import { z } from "zod";
-import { applyConfig, configurations, domains, nativeGuide, newConfigID, prepareChange, publishedDocumentation, readLocal, redact, writeLocal } from "./native-workbench-config";
+import { invoke } from "@tauri-apps/api/core"
+import { notifyWorkbenchChange } from "~/services/workbench-realtime.service"
+import { listen } from "@tauri-apps/api/event"
+import { isEqual } from "lodash-es"
+import { z } from "zod"
+import {
+  applyConfig,
+  configurations,
+  domains,
+  nativeGuide,
+  newConfigID,
+  prepareChange,
+  publishedDocumentation,
+  readLocal,
+  redact,
+  writeLocal,
+} from "./native-workbench-config"
 
 const proposalKey = "workbench-native-proposals"
 const approvalPolicyKey = "workbench-native-approval-required"
@@ -169,11 +180,9 @@ async function decide(id: string, approve: boolean, external = false) {
       await writeLocal(proposalKey, entries)
       try {
         const after = await prepareChange(change, current)
-        const result = await applyConfig(change, current, after)
+        await applyConfig(change, current, after)
         proposal.status = "applied"
-        proposal.result = {
-          id: result && typeof result === "object" ? result.id : change.id,
-        }
+        proposal.result = { id: change.id }
       } catch (error) {
         proposal.status = "failed"
         proposal.error = error instanceof Error ? error.message : String(error)
@@ -302,6 +311,38 @@ async function nativeMcpOperation<T>(path: string, body: unknown): Promise<T> {
     }
     if (section === "configs") {
       const entries = await configurations(domains.parse(id))
+      if (!action && body !== undefined) {
+        if (id !== "automation") throw new Error("Unsupported local operation")
+        const data = z
+          .object({
+            collectionID: z.string().min(1),
+            requestID: z.string().min(1).nullable().optional(),
+            environmentID: z.string().min(1).optional(),
+            config: z.record(z.unknown()),
+          })
+          .strict()
+          .parse(body)
+        const targets = await configurations(
+          data.requestID ? "request" : "collection"
+        )
+        const target = targets.find(
+          ({ id }) => id === (data.requestID ?? data.collectionID)
+        )
+        if (!target) throw new Error("Run target does not exist")
+        const change = {
+          entity: "automation" as const,
+          operation: "create" as const,
+          id: newConfigID("automation"),
+          data: {
+            ...data,
+            requestID: data.requestID ?? undefined,
+            name: target.data.name,
+          },
+        }
+        const after = await prepareChange(change)
+        await applyConfig(change, undefined, after)
+        return after as T
+      }
       if (!action) return { items: entries.map(({ data }) => data) } as T
       const item = entries.find(
         ({ id: itemId }) => itemId === decodeURIComponent(action)
@@ -312,6 +353,8 @@ async function nativeMcpOperation<T>(path: string, body: unknown): Promise<T> {
         const data = z
           .object({
             environmentID: z.string().min(1).optional(),
+            collectionID: z.string().min(1).optional(),
+            requestID: z.string().min(1).nullable().optional(),
             config: z.record(z.unknown()),
           })
           .strict()
@@ -320,7 +363,9 @@ async function nativeMcpOperation<T>(path: string, body: unknown): Promise<T> {
           entity: "automation" as const,
           operation: "update" as const,
           id: item.id,
-          data,
+          data: Object.hasOwn(data, "requestID")
+            ? { ...data, requestID: data.requestID ?? undefined }
+            : data,
         }
         const after = await prepareChange(change, item.data)
         await applyConfig(change, item.data, after)

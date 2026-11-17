@@ -1,4 +1,5 @@
 import {
+  AutomationConfigSchema,
   Environment,
   generateUniqueRefId,
   getDefaultGQLRequest,
@@ -8,9 +9,8 @@ import {
   makeCollection,
   type EnvironmentVariable,
 } from "@apirequest/data"
-import { invoke } from "@tauri-apps/api/core"
 import { z } from "zod"
-import { NATIVE_STORE_SCOPE, Store } from "~/kernel/store"
+import { Store } from "~/kernel/store"
 import {
   populateLocalStoresFromVariables,
   stripClientLocalValuesForWire,
@@ -114,19 +114,9 @@ const shape = {
     .object({
       name: text,
       collectionID: reference,
+      requestID: reference.optional(),
       environmentID: reference.optional(),
-      config: z
-        .object({
-          iterations: count(1, 1000),
-          delay: count(0, 60000),
-          stopOnError: z.boolean(),
-          persistResponses: z.boolean(),
-          keepVariableValues: z.boolean(),
-          executeScripts: z.boolean(),
-        })
-        .partial()
-        .strict()
-        .optional(),
+      config: AutomationConfigSchema.partial().optional(),
     })
     .strict(),
   load_test: z
@@ -391,6 +381,13 @@ export async function prepareChange(change: Change, before?: Config) {
   if (["documentation", "automation"].includes(change.entity)) {
     findFolder(activeTree(), String(data.collectionID ?? before?.collectionID))
   }
+  if (change.entity === "automation" && data.requestID) {
+    const request = (await configurations("request")).find(
+      ({ id }) => id === data.requestID
+    )
+    if (!request || request.data.collectionID !== data.collectionID)
+      throw new Error("Request does not belong to the selected collection")
+  }
   if (change.entity === "load_test") {
     const request = (await configurations("request")).find(
       ({ id }) => id === data.requestID
@@ -508,7 +505,7 @@ export async function applyConfig(
   before: Config | undefined,
   after: Config | undefined
 ) {
-  const { entity, operation, id } = change
+  const { entity, id } = change
   if (entity === "collection" || entity === "request")
     return applyTree(change, before, after)
   if (entity === "environment") {
