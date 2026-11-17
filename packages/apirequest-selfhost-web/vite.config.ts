@@ -248,7 +248,12 @@ export default defineConfig({
           if (["HoppButtonPrimary", "HoppButtonSecondary"].includes(compName))
             return {
               name: compName,
-              from: path.resolve(__dirname, "../apirequest-common/src/helpers/ui-buttons"),
+              from: normalizePath(
+                path.resolve(
+                  __dirname,
+                  "../apirequest-common/src/helpers/ui-buttons"
+                )
+              ),
             }
           if (compName.startsWith("Hopp"))
             return { name: compName, from: "@apirequest/ui" }
