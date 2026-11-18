@@ -296,7 +296,69 @@
       await invoke("workbench_store", {
         action: { type: "put", scope: "smoke", key: "marker", value: "SQLite" },
       })
+      stage = "native pre-request and post-request scripts"
+      // Exercise the real request pipeline under the packaged CSP. Empty scripts
+      // bypass the sandbox and would miss a blocked QuickJS WASM bootstrap.
+      const findRequestTab = (vnode) => {
+        if (!vnode || typeof vnode !== "object") return
+        const tab = vnode.component?.props.modelValue
+        if (
+          tab?.document?.type === "request" &&
+          tab.document.request.endpoint === target
+        )
+          return tab
+        const subtree = vnode.component?.subTree ?? vnode.suspense?.activeBranch
+        const nested = findRequestTab(subtree)
+        if (nested) return nested
+        if (Array.isArray(vnode.children)) {
+          for (const child of vnode.children) {
+            const match = findRequestTab(child)
+            if (match) return match
+          }
+        }
+      }
+      const scriptTab = findRequestTab(document.querySelector("#app")._vnode)
+      if (!scriptTab) throw new Error("Could not find the active request tab")
+      scriptTab.document.request.preRequestScript = `
+        hopp.request.setHeader("X-Sandbox-Smoke", "wasm-ready");
+        console.log("native-pre-request-ready");
+      `
+      scriptTab.document.request.testScript = `
+        const echoed = hopp.response.headers.find(
+          (header) => header.key.toLowerCase() === "x-sandbox-smoke"
+        );
+        if (hopp.response.statusCode !== 422 || echoed?.value !== "wasm-ready")
+          throw new Error("The server did not receive the scripted request header");
+        console.log("native-post-request-ready");
+      `
       send.click()
+      const scriptResults = await until(() => {
+        if (scriptTab.document.response?.type === "script_fail")
+          throw new Error(scriptTab.document.response.error.message)
+        return scriptTab.document.testResults
+      })
+      if (
+        scriptResults.scriptError ||
+        !["native-pre-request-ready", "native-post-request-ready"].every(
+          (message) =>
+            scriptResults.consoleEntries.some((entry) =>
+              entry.args.includes(message)
+            )
+        )
+      )
+        throw new Error("Native request scripts did not complete successfully")
+      stage = "native request without scripts"
+      scriptTab.document.request.preRequestScript = ""
+      scriptTab.document.request.testScript = ""
+      scriptTab.document.testResults = null
+      send.click()
+      const emptyResults = await until(() => scriptTab.document.testResults)
+      if (
+        emptyResults.scriptError ||
+        emptyResults.consoleEntries.length !== 0 ||
+        scriptTab.document.response?.statusCode !== 422
+      )
+        throw new Error("An empty script request did not complete successfully")
     }
     stage = "restored collection"
     await until(() =>

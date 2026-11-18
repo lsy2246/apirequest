@@ -25,6 +25,8 @@ class ResponseHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(422)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        if self.headers.get("X-Sandbox-Smoke"):
+            self.send_header("X-Sandbox-Smoke", self.headers["X-Sandbox-Smoke"])
         self.end_headers()
         self.wfile.write(body)
 
