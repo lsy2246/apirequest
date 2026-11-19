@@ -179,10 +179,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { useI18n } from "~/composables/i18n";
-import { downloadNativeHistory } from "~/helpers/native-workbench-history";
-import { formatBytes, historyResultAPI, historyResultURL, pendingHistoryResults, type HistoryResultDetail } from "~/helpers/workbench-history-results";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue"
+import { useI18n } from "~/composables/i18n"
+import { downloadNativeHistory } from "~/helpers/native-workbench-history"
+import {
+  formatBytes,
+  historyResultAPI,
+  historyResultURL,
+  pendingHistoryResults,
+  type HistoryResultDetail,
+} from "~/helpers/workbench-history-results"
 
 const props = defineProps<{ historyId: string }>()
 const emit = defineEmits<{ (event: "close"): void }>()
@@ -255,7 +261,8 @@ async function loadPreview(json: boolean) {
   previewLoading.value = true
   try {
     const response = await fetch(bodyURL.value, {
-      credentials: "include",
+      // Tauri's asset protocol does not accept credentialed CORS requests.
+      credentials: nativeWorkspace ? "omit" : "include",
       signal: controller.signal,
     })
     if (!response.ok || !response.body) throw new Error()

@@ -389,6 +389,24 @@
     const response = await fetch(url)
     if (!response.ok || (await response.text()) !== expected)
       throw new Error("Response archive mismatch")
+    stage = "history response preview"
+    await nav("/history")
+    const historyRow = await until(() =>
+      [...document.querySelectorAll('[data-testid="restore_history_entry"]')]
+        .find((node) => node.textContent.trim() === target)
+        ?.closest(".items-start")
+    )
+    named(historyRow, ["View result", "查看结果"]).click()
+    const resultDialog = await until(() => document.querySelector("[role='dialog']"))
+    await until(() => {
+      const alert = resultDialog.querySelector('[role="alert"]')
+      if (alert) throw new Error(`History preview failed: ${alert.textContent.trim()}`)
+      return resultDialog.querySelector("pre")?.textContent === expected
+    })
+    const closeResult = await until(() => named(resultDialog, ["Close", "关闭"]))
+    closeResult.click()
+    await until(() => !document.querySelector("[role='dialog']"))
+    await nav("/")
     stage = "collection restore and cases"
     if (!window.__workbenchSmoke.restart) {
       stage = "collection documentation menu"
