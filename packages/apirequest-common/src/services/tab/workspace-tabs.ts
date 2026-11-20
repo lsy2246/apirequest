@@ -11,6 +11,7 @@ import { PersistenceService, STORE_KEYS } from "../persistence"
 import type { Workspace } from "../workspace.service"
 import { TabService } from "./tab"
 import { HoppTab, PersistableTabState, ProtocolDrafts } from "."
+import { assertCollectionRequestLoaded } from "~/helpers/collection-summary"
 export type { ProtocolDrafts }
 /**
  * Tab service for the unified workspace tab system.
@@ -88,6 +89,8 @@ export class WorkspaceTabsService extends TabService<HoppTabDocument, true> {
     document: HoppTabDocument,
     switchToIt = true
   ): HoppTab<HoppTabDocument> {
+    if (document.type === "request" || document.type === "gql-request")
+      assertCollectionRequestLoaded(document.request)
     const tab = super.createNewTab(document, switchToIt)
     const stored = this.tabMap.get(tab.id)
     if (stored) stored.workspaceHandle = this._attachedWorkspace.value

@@ -11,6 +11,7 @@ import {
   HoppRESTRequest,
 } from "@apirequest/data"
 import { Service } from "dioc"
+import { assertCollectionLoaded } from "~/helpers/collection-summary"
 import { hasActualScript } from "@apirequest/js-sandbox/scripting"
 import * as E from "fp-ts/Either"
 import { cloneDeep } from "lodash-es"
@@ -297,6 +298,7 @@ export class TestRunnerService extends Service {
     // variables stay raw on `collection.variables` for the plan walk.
     ancestorVariables: HoppCollectionVariable[] = []
   ) {
+    assertCollectionLoaded(collection)
     const tabID = tab.value.id
     tab.value.document.runError = undefined
     // `undefined` runs the full collection; an array runs that subset.

@@ -90,6 +90,7 @@
         >
           <CollectionsCollection
             v-if="node.data.type === 'collections'"
+            :data-collection-folder-path="node.id"
             :id="node.id"
             v-tree-expansion="{
               command: expansionCommand,
@@ -211,6 +212,7 @@
           />
           <CollectionsCollection
             v-if="node.data.type === 'folders'"
+            :data-collection-folder-path="node.id"
             :id="node.id"
             v-tree-expansion="{
               command: expansionCommand,

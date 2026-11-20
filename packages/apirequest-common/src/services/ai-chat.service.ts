@@ -1,4 +1,5 @@
 import { updateInheritedPropertiesForAffectedRequests } from "~/helpers/collection/collection"
+import { ensureRemoteRequest, ensureRemoteCollection } from "~/helpers/remote-collections"
 import { WorkspaceType } from "~/helpers/backend/enums"
 import { getWebBackend } from "~/platform/web-backend"
 import { Service } from "dioc"
@@ -3184,6 +3185,7 @@ export class AIChatService extends Service {
     if (!lookup || "ambiguous" in lookup)
       return this.collectionMiss(name, lookup)
     const found = lookup.found
+    found.collection = await ensureRemoteCollection(found.collection)
     const parsed = parseCollectionRequestDefinitions(requests)
     if ("error" in parsed) return `⚠️ ${parsed.error}`
     const existingIn = (collection: HoppCollection, requestName: string) => {
@@ -3297,7 +3299,8 @@ export class AIChatService extends Service {
       const available = listRequestNames(collections)
       return `I couldn't find a request named "${reqName}"${collName ? ` in "${collName}"` : ""}.${available ? ` Available: ${available}.` : ""}`
     }
-    const { request, folderPath, requestIndex } = found
+    const { folderPath, requestIndex } = found
+    const request = await ensureRemoteRequest(found.request)
     if (!isRESTRequest(request)) {
       const label =
         (
@@ -3348,6 +3351,7 @@ export class AIChatService extends Service {
     if (!lookup || "ambiguous" in lookup)
       return this.collectionMiss(name, lookup)
     const found = lookup.found
+    found.collection = await ensureRemoteCollection(found.collection)
     const totalRequests = this.countCollectionRequests(found.collection)
     if (totalRequests === 0) {
       return `⚠️ Collection **${found.label}** has no requests to run.`
@@ -4018,7 +4022,7 @@ export class AIChatService extends Service {
         const stored = folder?.requests[ctx.requestIndex]
         if (stored) {
           editRESTRequest(ctx.folderPath, ctx.requestIndex, {
-            ...stored,
+            ...await ensureRemoteRequest(stored),
             description,
           })
           this.syncOpenTabDescription(ctx, description)
@@ -4044,7 +4048,8 @@ export class AIChatService extends Service {
         }`
       )
     }
-    const { request, folderPath, requestIndex, label } = lookup.found
+    const { folderPath, requestIndex, label } = lookup.found
+    const request = await ensureRemoteRequest(lookup.found.request)
     // Replaced wholesale by the store — always send the full request.
     editRESTRequest(folderPath, requestIndex, { ...request, description })
     this.syncOpenTabDescription(

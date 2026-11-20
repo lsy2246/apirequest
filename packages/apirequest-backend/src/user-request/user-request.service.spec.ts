@@ -155,6 +155,22 @@ beforeEach(() => {
   mockUserCollectionService.getUserCollection.mockClear();
 });
 
+describe('summary write protection', () => {
+  const summary = JSON.stringify({ __workbenchSummary: true, id: 'one', name: 'Unloaded' });
+  it('rejects creating a request from an unloaded navigation summary', async () => {
+    await expect(userRequestService.createRequest('folder', 'Unloaded', summary, ReqType.REST, user))
+      .rejects.toThrow('Request details must be loaded');
+    expect(mockPrisma.userRequest.create).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+  it('rejects replacing a saved request with an unloaded navigation summary', async () => {
+    mockPrisma.userRequest.findFirst.mockResolvedValue(dbUserRequests[0]);
+    await expect(userRequestService.updateRequest(dbUserRequests[0].id, 'Unloaded', ReqType.REST, summary, user))
+      .rejects.toThrow('Request details must be loaded');
+    expect(mockPrisma.userRequest.update).not.toHaveBeenCalled();
+  });
+});
+
 describe('UserRequestService', () => {
   describe('fetchUserRequests', () => {
     test('Should resolve right and fetch user requests (with collection ID)', () => {

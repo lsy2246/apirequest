@@ -13,6 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import compression from 'compression';
 
 function warnIfExampleSecrets(configService: ConfigService): void {
   if (
@@ -119,6 +120,13 @@ export async function bootstrap() {
     }
   });
   app.enableCors({ origin: localWorkspace.origins, credentials: true });
+  app.use(compression({
+    level: 4,
+    filter: (req, res) =>
+      !req.path.startsWith('/mock/') &&
+      !String(res.getHeader('Content-Type') ?? '').includes('text/event-stream') &&
+      compression.filter(req, res),
+  }));
 
   app.enableVersioning({
     type: VersioningType.URI,
@@ -136,7 +144,13 @@ export async function bootstrap() {
   const webRoot = configService.get<string>('APIREQUEST_WEB_ROOT');
   if (webRoot) {
     const root = resolve(webRoot);
-    app.useStaticAssets(root);
+    app.useStaticAssets(root, {
+      setHeaders: (res, file) => {
+        res.setHeader('Cache-Control', file.startsWith(resolve(root, 'assets') + '/')
+          ? 'public, max-age=31536000, immutable'
+          : 'no-cache');
+      },
+    });
     app.use((req, res, next) => {
       const apiPath = /^\/(v1|graphql|mock|health)(\/|$)/.test(req.path);
       if (req.method === 'GET' && !apiPath && req.accepts('html'))

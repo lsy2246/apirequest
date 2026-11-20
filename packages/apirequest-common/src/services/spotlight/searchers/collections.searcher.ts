@@ -12,6 +12,7 @@ import { HoppCollection, HoppGQLRequest, HoppRESTRequest } from "@apirequest/dat
 import { WorkspaceService } from "~/services/workspace.service";
 import { invokeAction } from "~/helpers/actions";
 import { isGQLRequest } from "~/helpers/request-type";
+import { ensureRemoteRequest, remoteRequestLocation } from "~/helpers/remote-collections";
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
 /**
  * A spotlight searcher that searches through the user's collections
@@ -167,18 +168,22 @@ export class CollectionsSpotlightSearcherService
     }
   }
 
-  public onResultSelect(result: SpotlightSearcherResult): void {
+  public async onResultSelect(result: SpotlightSearcherResult): Promise<void> {
     if (result.id === "create-collection") return invokeAction("collection.new")
     if (result.id === "import-collection")
       return invokeAction(`modals.collection.import`)
     const [type, path] = result.id.split("-")
     if (type === "rest") {
       const folderPath = path.split("/").map((x) => parseInt(x))
-      const reqIndex = folderPath.pop()!
-      const resolvedFolderPath = folderPath.join("/")
-      const req =
+      let reqIndex = folderPath.pop()!
+      let resolvedFolderPath = folderPath.join("/")
+      let req =
         this.getRESTFolderFromFolderPath(resolvedFolderPath)?.requests[reqIndex]
       if (!req) return
+      try { req = await ensureRemoteRequest(req) }
+      catch (error) { console.error("接口详情加载失败", error); return }
+      const location = remoteRequestLocation(req)
+      if (location) { reqIndex = location.requestIndex; resolvedFolderPath = location.folderPath }
       // Record `requestRefID` like the sidebar does — a tab opened without one
       // isn't matched by lookups that supply it, and the request opens twice
       const saveContext = {

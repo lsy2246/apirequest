@@ -531,10 +531,16 @@ const collectionLoadFailed = ref(false)
 const loadCollectionTree = async () => {
   collectionLoadFailed.value = false
 
-  const tree = await getCollectionTree(
-    props.collectionRunnerData.type,
-    props.collectionRunnerData.collectionID
-  )
+  let tree: HoppCollection | undefined
+  try {
+    tree = await getCollectionTree(
+      props.collectionRunnerData.type,
+      props.collectionRunnerData.collectionID
+    )
+  } catch {
+    collectionLoadFailed.value = true
+    return
+  }
 
   if (!tree) {
     collectionLoadFailed.value = true
@@ -742,7 +748,10 @@ const runTests = async () => {
 const getCollectionTree = async (
   _type: CollectionRunnerData["type"],
   collectionID: string
-) => (collectionID ? getRESTCollectionByRefId(collectionID) : undefined)
+) => {
+  const collection = collectionID ? getRESTCollectionByRefId(collectionID) : undefined
+  return collection ? (await import("~/helpers/remote-collections")).ensureRemoteCollection(collection) : undefined
+}
 
 function checkIfCollectionIsEmpty(collection: HoppCollection): boolean {
   // Check if the collection has requests or if any child collection is non-empty

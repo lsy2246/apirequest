@@ -37,6 +37,7 @@ import { hoppCollectionsToOpenAPI } from "~/helpers/import-export/export/openapi
 import { openWorkbenchCurlImport } from "~/helpers/workbench";
 import { platform } from "~/platform";
 import IconPlus from "~icons/lucide/plus";
+import { ensureAllRemoteCollections } from "~/helpers/remote-collections";
 // 个人集合仍可导出备份及 OpenAPI 文档；接口导入统一使用 cURL。
 defineProps<{ collectionsType?: unknown }>()
 const emit = defineEmits<{ (event: "hide-modal"): void }>()
@@ -59,7 +60,7 @@ const exportJSON = async () => {
   loading.value = true
   try {
     const result = await initializeDownloadFile(
-      myCollectionsExporter(collections.value),
+      myCollectionsExporter(await ensureAllRemoteCollections()),
       "api-collections"
     )
     if (E.isRight(result)) {
@@ -76,7 +77,7 @@ const exportOpenAPI = async (format: "json" | "yaml") => {
   if (loading.value || !hasCollections()) return
   loading.value = true
   try {
-    const { doc } = hoppCollectionsToOpenAPI("Personal API", collections.value)
+    const { doc } = hoppCollectionsToOpenAPI("Personal API", await ensureAllRemoteCollections())
     const result = await platform.kernelIO.saveFileWithDialog({
       data: format === "yaml" ? yaml.dump(doc) : JSON.stringify(doc, null, 2),
       contentType:

@@ -1,5 +1,6 @@
 import { HoppCollection, HoppGQLRequest, HoppRESTRequest, isGQLRequest, makeCollection, parseRawKeyValueEntries, rawKeyValueEntriesToString } from "@apirequest/data";
 import { OpenAPIV3_1 } from "openapi-types";
+import { assertCollectionLoaded } from "~/helpers/collection-summary";
 
 type AuthLike = HoppRESTRequest["auth"]
 
@@ -745,6 +746,7 @@ function sanitizeRequestForDroppedExtension(
 export function hoppCollectionToOpenAPI(collection: HoppCollection): {
   doc: OpenAPIV3_1.Document
 } {
+  assertCollectionLoaded(collection)
   const paths: OpenAPIV3_1.PathsObject = {}
   const tags: OpenAPIV3_1.TagObject[] = []
   const usedTagNames = new Set<string>()

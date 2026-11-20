@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PubSubService } from '../pubsub/pubsub.service';
 import * as E from 'fp-ts/Either';
@@ -13,6 +13,10 @@ import { SortOptions } from 'src/types/SortOptions';
 
 @Injectable()
 export class UserRequestService {
+  private assertRequestLoaded(value: unknown) {
+    if (value && typeof value === 'object' && (value as any).__workbenchSummary === true)
+      throw new BadRequestException('Request details must be loaded before saving');
+  }
   constructor(
     private readonly prisma: PrismaService,
     private readonly pubsub: PubSubService,
@@ -117,6 +121,7 @@ export class UserRequestService {
   ): Promise<E.Left<string> | E.Right<UserRequest>> {
     const jsonRequest = stringToJson(request);
     if (E.isLeft(jsonRequest)) return E.left(jsonRequest.left);
+    this.assertRequestLoaded(jsonRequest.right);
 
     const collection = await this.userCollectionService.getUserCollection(
       collectionID,
@@ -193,6 +198,7 @@ export class UserRequestService {
     if (request) {
       const jsonRequestE = stringToJson(request);
       if (E.isLeft(jsonRequestE)) return E.left(jsonRequestE.left);
+      this.assertRequestLoaded(jsonRequestE.right);
       jsonRequest = jsonRequestE.right;
     }
 

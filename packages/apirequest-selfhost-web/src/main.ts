@@ -23,4 +23,8 @@ createHoppApp("#app", {
   },
   limits: { collectionImportSizeLimit: 50 },
   backend,
-}).catch(console.error)
+}).catch((error) => {
+  console.error(error)
+  const message = document.querySelector("[data-startup-message]")
+  if (message) message.textContent = "工作区启动失败，请刷新重试。"
+})

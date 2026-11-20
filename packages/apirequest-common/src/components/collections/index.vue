@@ -44,29 +44,29 @@
       @add-request="addRequest"
       @import-curl="importCurlIntoFolder"
       @add-gql-request="addGqlRequest"
-      @edit-request="editRequest"
+      @edit-request="withRequestDetails(editRequest)($event)"
       @edit-collection="editCollection"
       @edit-folder="editFolder"
-      @edit-response="editResponse"
+      @edit-response="withRequestDetails(editResponse)($event)"
       @drop-request="dropRequest"
       @drop-collection="dropCollection"
       @display-modal-add="displayModalAdd(true)"
       @duplicate-collection="duplicateCollection"
       @open-documentation="openDocumentation"
-      @open-request-documentation="openRequestDocumentation"
-      @duplicate-request="duplicateRequest"
-      @duplicate-response="duplicateResponse"
+      @open-request-documentation="withRequestDetails(openRequestDocumentation)($event)"
+      @duplicate-request="withRequestDetails(duplicateRequest)($event)"
+      @duplicate-response="withRequestDetails(duplicateResponse)($event)"
       @edit-properties="editProperties"
       @export-data="exportData"
       @remove-collection="removeCollection"
       @remove-folder="removeFolder"
       @remove-request="removeRequest"
-      @remove-response="removeResponse"
-      @share-request="shareRequest"
-      @add-example="addExample"
+      @remove-response="withRequestDetails(removeResponse)($event)"
+      @share-request="withRequestDetails(shareRequest)($event)"
+      @add-example="withRequestDetails(addExample)($event)"
       @select="selectPicked"
-      @select-response="selectResponse"
-      @select-request="selectRequest"
+      @select-response="withRequestDetails(selectResponse)($event)"
+      @select-request="withRequestDetails(selectRequest)($event)"
       @sort-collections="sortCollections"
       @update-request-order="updateRequestOrder"
       @update-collection-order="updateCollectionOrder"
@@ -241,6 +241,7 @@
 <script setup lang="ts">
 import { useI18n } from "@composables/i18n"
 import { useToast } from "@composables/toast"
+import { ensureRemoteRequest, ensureRemoteCollection, remoteRequestLocation } from "~/helpers/remote-collections"
 import { generateUniqueRefId, getDefaultRESTRequest, HoppCollection, HoppGQLRequest, HoppGQLRequestResponse, HoppRESTRequest, HoppRESTRequestResponse, isGQLRequest, makeCollection, makeHoppGQLResponseOriginalRequest, makeHoppRESTResponseOriginalRequest } from "@apirequest/data"
 import { getDefaultGQLRequest } from "@apirequest/data"
 import { parse as parseGQLDocument } from "graphql"
@@ -331,6 +332,20 @@ const showAddExampleModal = ref(false)
 // the modal closes.
 const showExportModal = ref(false)
 const exportTargetCollection = ref<HoppCollection | null>(null)
+const withRequestDetails = <T extends { request: HoppRESTRequest | HoppGQLRequest }>(handler: (payload: T) => unknown) =>
+  async (payload: T) => {
+    try {
+      const request = await ensureRemoteRequest(payload.request)
+      const location = remoteRequestLocation(request)
+      await handler({
+        ...payload, request,
+        ...(location && "folderPath" in payload ? { folderPath: location.folderPath } : {}),
+        ...(location && "requestIndex" in payload ? { requestIndex: String(location.requestIndex) } : {}),
+      } as T)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("error.something_went_wrong"))
+    }
+  }
 const editingProperties = ref<EditingProperties>({
   collection: null,
   isRootCollection: false,
@@ -845,6 +860,8 @@ const duplicateCollection = async ({
   {
     const isValidToken = await handleTokenValidation()
     if (!isValidToken) return
+    const collection = navigateToFolderWithIndexPath(myCollections.value, pathOrID.split("/").map(Number))
+    if (collection) await ensureRemoteCollection(collection)
     duplicateRESTCollection(pathOrID, collectionSyncID)
   }
 }
@@ -2036,7 +2053,7 @@ const doExportHoppCollection = async (collection: HoppCollection) => {
   exportLoading.value = true
   try {
     {
-      const hoppColl = collection as HoppCollection
+      const hoppColl = await ensureRemoteCollection(collection)
       await initializeDownloadCollection(
         stringifyForExport(hoppColl),
         hoppColl.name
@@ -2096,7 +2113,7 @@ const doExportOpenAPI = async (format: "json" | "yaml") => {
       // Chooser modal warns about lossiness upfront; per-export warnings would
       // be redundant.
       const { doc: openAPIDoc } = hoppCollectionToOpenAPI(
-        collection as HoppCollection
+        await ensureRemoteCollection(collection)
       )
       const name = (collection as HoppCollection).name
       await saveOpenAPIDoc(openAPIDoc, name)
@@ -2330,7 +2347,7 @@ const sortCollections = (payload: {
     sortOrder,
   })
 }
-const openDocumentation = ({
+const openDocumentation = async ({
   pathOrID,
   collection,
 }: {
@@ -2338,7 +2355,7 @@ const openDocumentation = ({
   collection: HoppCollection
 }) => {
   editingCollectionPath.value = pathOrID
-  editingCollection.value = collection
+  editingCollection.value = await ensureRemoteCollection(collection)
   editingCollectionIsTeam.value =
     collectionsType.value.type === "team-collections"
   editingCollectionID.value =

@@ -1,5 +1,6 @@
 import { generateUniqueRefId, HoppCollection, HoppCollectionVariable, HoppGQLAuth, HoppGQLRequest, HoppRESTAuth, HoppRESTHeaders, HoppRESTRequest, makeCollection, GQLHeader } from "@apirequest/data";
 import { cloneDeep } from "lodash-es";
+import { assertCollectionLoaded, assertCollectionRequestLoaded } from "~/helpers/collection-summary";
 import { hasActualScript } from "@apirequest/js-sandbox/scripting";
 import { pluck } from "rxjs/operators";
 import { resolveSaveContextOnRequestReorder } from "~/helpers/collection/request";
@@ -913,6 +914,7 @@ export const restCollections$ = restCollectionStore.subject$.pipe(
 )
 
 export function appendRESTCollections(entries: HoppCollection[]) {
+  entries.forEach(assertCollectionLoaded)
   restCollectionStore.dispatch({
     dispatcher: "appendCollections",
     payload: {
@@ -921,6 +923,7 @@ export function appendRESTCollections(entries: HoppCollection[]) {
   })
 }
 export function addRESTCollection(collection: HoppCollection) {
+  assertCollectionLoaded(collection)
   restCollectionStore.dispatch({
     dispatcher: "addCollection",
     payload: {
@@ -938,6 +941,7 @@ export function isRootRequestCollection(collection: HoppCollection) {
 export function saveRESTRequestAtRoot(
   request: HoppRESTRequest | HoppGQLRequest
 ) {
+  assertCollectionRequestLoaded(request)
   const collections = restCollectionStore.value.state
   const index = collections.findIndex(isRootRequestCollection)
   if (index !== -1) {
@@ -1187,6 +1191,8 @@ export function duplicateRESTCollection(
   path: string,
   collectionSyncID?: string
 ) {
+  const collection = navigateToFolderWithIndexPath(restCollectionStore.value.state, path.split("/").map(Number))
+  if (collection) assertCollectionLoaded(collection)
   restCollectionStore.dispatch({
     dispatcher: "duplicateCollection",
     payload: {
@@ -1214,6 +1220,7 @@ export function editRESTRequest(
   requestIndex: number,
   requestNew: HoppRESTRequest | HoppGQLRequest
 ) {
+  assertCollectionRequestLoaded(requestNew)
   const indexPaths = path.split("/").map((x) => parseInt(x))
   if (
     !navigateToFolderWithIndexPath(restCollectionStore.value.state, indexPaths)
@@ -1232,6 +1239,7 @@ export function saveRESTRequestAs(
   path: string,
   request: HoppRESTRequest | HoppGQLRequest
 ) {
+  assertCollectionRequestLoaded(request)
   // For calculating the insertion request index
   const targetLocation = navigateToFolderWithIndexPath(
     restCollectionStore.value.state,

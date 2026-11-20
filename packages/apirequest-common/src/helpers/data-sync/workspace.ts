@@ -88,6 +88,7 @@ export async function snapshot(
   attachments = true,
   includeCapture = false
 ): Promise<Entry[]> {
+  await (await import("~/helpers/remote-collections")).ensureAllRemoteCollections()
   const entries: Entry[] = [],
     aliases = new Map<string, string>()
   const cases = useWorkbenchRequestCases()

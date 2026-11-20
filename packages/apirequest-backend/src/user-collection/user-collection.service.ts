@@ -954,6 +954,61 @@ export class UserCollectionService {
     collectionID: string | null,
     reqType: ReqType,
   ) {
+    if (collectionID === null) {
+      // The initial workspace snapshot must not issue queries per folder.
+      const collections = await this.prisma.userCollection.findMany({
+        where: { userUid: userUID },
+        orderBy: { orderIndex: 'asc' },
+        select: { id: true, title: true, parentID: true, type: true, data: true },
+      });
+      const roots = collections.filter(
+        (collection) =>
+          collection.parentID === null && collection.type === reqType,
+      );
+      if (!roots.length) {
+        return E.right(<UserCollectionExportJSONData>{
+          exportedCollection: '[]',
+          collectionType: reqType,
+        });
+      }
+      const requests = await this.prisma.userRequest.findMany({
+        where: { userUid: userUID },
+        orderBy: { orderIndex: 'asc' },
+        select: { id: true, title: true, collectionID: true, request: true },
+      });
+      const children = new Map<string | null, typeof collections>();
+      const collectionRequests = new Map<string, typeof requests>();
+      for (const collection of collections) {
+        const siblings = children.get(collection.parentID) ?? [];
+        siblings.push(collection);
+        children.set(collection.parentID, siblings);
+      }
+      for (const request of requests) {
+        const siblings = collectionRequests.get(request.collectionID) ?? [];
+        siblings.push(request);
+        collectionRequests.set(request.collectionID, siblings);
+      }
+      const exportFolder = (
+        collection: (typeof collections)[number],
+      ): CollectionFolder => ({
+        id: collection.id,
+        name: collection.title,
+        data: transformCollectionData(collection.data),
+        folders: (children.get(collection.id) ?? []).map(exportFolder),
+        requests: (collectionRequests.get(collection.id) ?? []).map(
+          (request) => ({
+            ...(request.request as Record<string, unknown>),
+            id: request.id,
+            name: request.title,
+          }),
+        ),
+      });
+      return E.right(<UserCollectionExportJSONData>{
+        exportedCollection: JSON.stringify(roots.map(exportFolder)),
+        collectionType: reqType,
+      });
+    }
+
     // Get all child collections details
     const childCollectionList = await this.prisma.userCollection.findMany({
       where: {

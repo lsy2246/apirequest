@@ -2315,6 +2315,117 @@ describe('updateUserCollection', () => {
   });
 });
 
+describe('exportUserCollectionsToJSON workspace snapshot', () => {
+  test('preserves folder and request order, metadata and database identities with two scoped reads', async () => {
+    const child = {
+      ...childRESTUserCollection,
+      data: { preRequestScript: 'before()', testScript: 'after()' },
+    };
+    const gqlRoot = { ...rootGQLUserCollection, id: 'gql-root' };
+    // Database results are ordered by orderIndex, across all parents.
+    mockPrisma.userCollection.findMany.mockResolvedValueOnce([
+      rootRESTUserCollection,
+      child,
+      gqlRoot,
+      rootRESTUserCollection_2,
+      { ...childRESTUserCollection_2, parentID: rootRESTUserCollection.id },
+    ]);
+    mockPrisma.userRequest.findMany.mockResolvedValueOnce([
+      {
+        id: 'request-1',
+        title: 'Database title',
+        collectionID: child.id,
+        request: { id: 'stale-id', name: 'Stale name', method: 'GET' },
+      },
+      {
+        id: 'request-2',
+        title: 'Second request',
+        collectionID: child.id,
+        request: { method: 'POST' },
+      },
+    ] as any);
+
+    const result = await userCollectionService.exportUserCollectionsToJSON(
+      user.uid,
+      null,
+      ReqType.REST,
+    );
+
+    expect(E.isRight(result)).toBe(true);
+    if (!E.isRight(result)) return;
+    const exported = JSON.parse(result.right.exportedCollection);
+    expect(exported.map((folder) => folder.id)).toEqual([
+      rootRESTUserCollection.id,
+      rootRESTUserCollection_2.id,
+    ]);
+    expect(exported[0].folders.map((folder) => folder.id)).toEqual([
+      child.id,
+      childRESTUserCollection_2.id,
+    ]);
+    expect(JSON.parse(exported[0].folders[0].data)).toEqual(child.data);
+    expect(exported[0].folders[0].requests).toEqual([
+      { id: 'request-1', name: 'Database title', method: 'GET' },
+      { id: 'request-2', name: 'Second request', method: 'POST' },
+    ]);
+    expect(result.right.collectionType).toBe(ReqType.REST);
+    for (const query of [
+      mockPrisma.userCollection.findMany,
+      mockPrisma.userRequest.findMany,
+    ]) {
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(query).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userUid: user.uid },
+          orderBy: { orderIndex: 'asc' },
+        }),
+      );
+    }
+    expect(mockPrisma.userCollection.findUniqueOrThrow).not.toHaveBeenCalled();
+  });
+
+  test('keeps the number of database reads constant for a deeply nested workspace', async () => {
+    mockPrisma.userCollection.findMany.mockResolvedValueOnce(
+      Array.from({ length: 120 }, (_, index) => ({
+        ...rootRESTUserCollection,
+        id: `folder-${index}`,
+        parentID: index === 0 ? null : `folder-${index - 1}`,
+      })),
+    );
+    mockPrisma.userRequest.findMany.mockResolvedValueOnce([]);
+    const result = await userCollectionService.exportUserCollectionsToJSON(
+      user.uid,
+      null,
+      ReqType.REST,
+    );
+    expect(E.isRight(result)).toBe(true);
+    if (!E.isRight(result)) return;
+    let folders = JSON.parse(result.right.exportedCollection);
+    for (let index = 0; index < 120; index++) {
+      expect(folders).toHaveLength(1);
+      expect(folders[0].id).toBe(`folder-${index}`);
+      folders = folders[0].folders;
+    }
+    expect(folders).toEqual([]);
+    expect(mockPrisma.userCollection.findMany).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.userRequest.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns an empty snapshot for a user without collections', async () => {
+    mockPrisma.userCollection.findMany.mockResolvedValueOnce([]);
+    mockPrisma.userRequest.findMany.mockResolvedValueOnce([]);
+    const result = await userCollectionService.exportUserCollectionsToJSON(
+      user.uid,
+      null,
+      ReqType.GQL,
+    );
+    expect(result).toEqualRight({
+      exportedCollection: '[]',
+      collectionType: ReqType.GQL,
+    });
+    expect(mockPrisma.userRequest.findMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('exportUserCollectionToJSONObject', () => {
   test('should use DB row id and title over conflicting values in stored request payload', async () => {
     const dbRowId = 'db-row-cuid-001';

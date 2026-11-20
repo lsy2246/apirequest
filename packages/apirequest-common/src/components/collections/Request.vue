@@ -25,7 +25,7 @@
       <div class="ms-1 w-3 flex items-center justify-end">
         <component
           :is="isResponseVisible ? IconArrowDown : IconArrowRight"
-          v-if="request.responses && Object.keys(request.responses).length > 0"
+          v-if="(isCollectionRequestSummary(request) && request.__hasResponses) || (request.responses && Object.keys(request.responses).length > 0)"
           class="svg-icons w-3 cursor-pointer hover:bg-primaryDark transition rounded"
           @click="toggleRequestResponse()"
         />
@@ -262,7 +262,10 @@ import IconArrowRight from "~icons/lucide/chevron-right";
 import IconArrowDown from "~icons/lucide/chevron-down";
 import IconBook from "~icons/lucide/book";
 import IconPlusCircle from "~icons/lucide/plus-circle";
-import { ref, PropType, watch, computed } from "vue";
+import { ref, PropType, watch, computed, nextTick } from "vue";
+import { ensureRemoteRequest, remoteRequestLoading } from "~/helpers/remote-collections";
+import { isCollectionRequestSummary } from "~/helpers/collection-summary";
+import { useToast } from "~/composables/toast";
 import { HoppRESTRequest, HoppGQLRequest } from "@apirequest/data";
 import { isGQLRequest } from "@apirequest/data";
 import IconGraphql from "~icons/hopp/graphql";
@@ -398,9 +401,15 @@ const selectRequest = () => {
   emit("select-request")
 }
 
-const toggleRequestResponse = () => {
-  emit("toggle-children")
-  isResponseVisible.value = !isResponseVisible.value
+const toggleRequestResponse = async () => {
+  try {
+    await ensureRemoteRequest(props.request)
+    await nextTick()
+    emit("toggle-children")
+    isResponseVisible.value = !isResponseVisible.value
+  } catch {
+    useToast().error(t("error.something_went_wrong"))
+  }
 }
 
 const dragStart = ({ dataTransfer }: DragEvent) => {
@@ -486,6 +495,7 @@ const updateLastItemOrder = (e: DragEvent) => {
 }
 
 const isRequestLoading = computed(() => {
+  if (props.request.id && remoteRequestLoading.has(props.request.id)) return true
   if (props.requestMoveLoading.length > 0 && props.requestID) {
     return props.requestMoveLoading.includes(props.requestID)
   }

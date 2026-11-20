@@ -16,6 +16,7 @@ import { addRESTCollection, addRESTFolder, cascadeParentCollectionForProperties,
 import { platform } from "~/platform";
 import { runDispatchWithOutSyncing } from "..";
 import { importToPersonalWorkspace } from "./import";
+import { isCollectionRequestSummary } from "~/helpers/collection-summary";
 function initCollectionsSync() {
   const authEvents$ = platform.auth.getAuthEventsStream()
   const currentUser$ = platform.auth.getCurrentUserStream()
@@ -240,6 +241,22 @@ function mergeCollections(
   return merged
 }
 async function loadUserCollections(collectionType: "REST" | "GQL") {
+  if (!import.meta.env.VITE_WORKBENCH_NATIVE && !window.__APIREQUEST_NATIVE__ &&
+      platform.auth.localSessionState?.value === "ready") {
+    const remote = await import("~/helpers/remote-collections")
+    remote.setRemoteCollectionInstaller((tree) =>
+      applyLocalWorkspaceSnapshot("REST", restCollectionStore.value.state, tree))
+    // Preserve the existing adoption path for device-only collections.
+    const pending = restCollectionStore.value.state.filter((item) => !item.id)
+    if (pending.length) {
+      await axios.post(`${import.meta.env.VITE_BACKEND_API_URL}/auth/local-collections`, {
+        collectionType,
+        collectionsJSON: JSON.stringify(pending.map(translateToPersonalCollectionFormat)),
+      }, { withCredentials: true, headers: { "X-Workbench-Local": "1" } })
+    }
+    await remote.initRemoteCollectionIndex()
+    return
+  }
   const res = await exportUserCollectionsToJSON(
     undefined,
     collectionType == "REST" ? ReqType.Rest : ReqType.Gql
@@ -310,7 +327,7 @@ async function loadUserCollections(collectionType: "REST" | "GQL") {
     }
   }
 }
-function applyLocalWorkspaceSnapshot(
+export function applyLocalWorkspaceSnapshot(
   collectionType: "REST" | "GQL",
   previous: HoppCollection[],
   fetched: HoppCollection[]
@@ -363,7 +380,7 @@ function applyLocalWorkspaceSnapshot(
     if (
       !location ||
       !next ||
-      (exampleName && !Object.hasOwn(next.responses, exampleName))
+      (exampleName && !isCollectionRequestSummary(next) && !Object.hasOwn(next.responses, exampleName))
     ) {
       doc.saveContext = undefined
       doc.inheritedProperties = undefined
@@ -371,7 +388,7 @@ function applyLocalWorkspaceSnapshot(
     }
     context.folderPath = location.folderPath
     context.requestIndex = location.requestIndex
-    if ("exampleID" in context && exampleName) {
+    if ("exampleID" in context && exampleName && !isCollectionRequestSummary(next)) {
       context.exampleID = String(
         Object.keys(next.responses).indexOf(exampleName)
       )

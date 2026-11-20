@@ -22,6 +22,7 @@ import {
 import { StoreError } from "@apirequest/kernel"
 
 import { Store } from "~/kernel/store"
+import { platform } from "~/platform"
 import { diag } from "~/kernel/log"
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
 import {
@@ -381,6 +382,10 @@ export class PersistenceService extends Service {
     }
 
     restCollectionStore.subject$.subscribe(async ({ state }) => {
+      // Remote workspaces cache their small index and individual details in
+      // IndexedDB. Serializing the entire tree here blocks the main thread and
+      // exceeds localStorage's quota even after opening just a few folders.
+      if (!window.__APIREQUEST_NATIVE__ && platform?.auth.localSessionState?.value === "ready") return
       await Store.set(STORE_NAMESPACE, STORE_KEYS.REST_COLLECTIONS, state)
     })
   }

@@ -4,6 +4,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  HttpCode,
   Param,
   Post,
   Req,
@@ -26,6 +27,7 @@ import { WorkbenchAutomationService } from './automation.service';
 import { McpDomainService } from './domain.service';
 import { workbenchEvents } from '../workbench-events';
 import { WorkbenchDataSyncService } from './data-sync.service';
+import { WorkspaceIndexService } from './workspace-index.service';
 
 type OwnerRequest = Request & { user: AuthUser };
 @Controller({ path: 'workbench-mcp', version: '1' })
@@ -37,6 +39,7 @@ export class WorkbenchMcpController {
     private readonly config: ConfigService,
     private readonly automation: WorkbenchAutomationService,
     private readonly dataSync: WorkbenchDataSyncService,
+    private readonly workspaceIndex: WorkspaceIndexService,
   ) {}
   private local(req: Request) {
     const policy = getLocalWorkspaceConfig(this.config);
@@ -66,6 +69,30 @@ export class WorkbenchMcpController {
     this.owner(req);
     res.setHeader('Cache-Control', 'no-store');
     return this.service.state(req.user.uid);
+  }
+  @Get('collections/index')
+  @UseGuards(JwtAuthGuard)
+  async collectionIndex(@Req() req: OwnerRequest, @Res() res: Response) {
+    this.owner(req);
+    const data = await this.workspaceIndex.index(req.user.uid);
+    const etag = `W/"${data.revision}"`;
+    res.setHeader('Cache-Control', 'private, no-cache');
+    res.setHeader('ETag', etag);
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    return res.json(data);
+  }
+  @Get('collections/requests/:id')
+  @UseGuards(JwtAuthGuard)
+  async collectionRequest(@Req() req: OwnerRequest, @Param('id') id: string) {
+    this.owner(req);
+    return this.workspaceIndex.request(req.user.uid, id);
+  }
+  @Post('collections/requests/batch')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  async collectionRequests(@Req() req: OwnerRequest, @Body() body: { ids?: unknown }) {
+    this.owner(req);
+    return this.workspaceIndex.requests(req.user.uid, body?.ids);
   }
   @Post('data/http')
   @UseGuards(JwtAuthGuard)

@@ -9,6 +9,7 @@ import { WorkbenchMcpService } from './mcp.service';
 import { WorkbenchAutomationService } from './automation.service';
 import { WorkbenchMcpController } from './mcp.controller';
 import { WorkbenchDataSyncService } from './data-sync.service';
+import { WorkspaceIndexService } from './workspace-index.service';
 @Module({
   imports: [
     UserCollectionModule,
@@ -18,6 +19,7 @@ import { WorkbenchDataSyncService } from './data-sync.service';
     PublishedDocsModule,
   ],
   providers: [
+    WorkspaceIndexService,
     WorkbenchDataSyncService,
     McpDomainService,
     WorkbenchMcpService,
