@@ -1,7 +1,8 @@
-import * as E from "fp-ts/Either";
-import type { HoppFetchHook, FetchCallMeta } from "@apirequest/js-sandbox";
-import type { KernelInterceptorService } from "~/services/kernel-interceptor.service";
-import type { RelayRequest } from "@apirequest/kernel";
+import * as E from "fp-ts/Either"
+import type { HoppFetchHook, FetchCallMeta } from "@apirequest/js-sandbox"
+import type { KernelInterceptorService } from "~/services/kernel-interceptor.service"
+import type { RelayRequest } from "@apirequest/kernel"
+import { raceWithSignal, caseDeadline } from "@apirequest/data"
 
 /**
  * Creates a hopp.fetch() hook implementation for the web app.
@@ -14,9 +15,11 @@ import type { RelayRequest } from "@apirequest/kernel";
  */
 export const createHoppFetchHook = (
   kernelInterceptor: KernelInterceptorService,
-  onFetchCall?: (meta: FetchCallMeta) => void
+  onFetchCall?: (meta: FetchCallMeta) => void,
+  signal?: AbortSignal
 ): HoppFetchHook => {
-  return async (input, init) => {
+  const hook: HoppFetchHook = async (input, init) => {
+    signal?.throwIfAborted()
     const urlStr =
       typeof input === "string"
         ? input
@@ -34,10 +37,17 @@ export const createHoppFetchHook = (
 
     // Convert Fetch API request to RelayRequest
     const relayRequest = await convertFetchToRelayRequest(input, init)
+    signal?.throwIfAborted()
 
     // Execute via interceptor
     const execution = kernelInterceptor.execute(relayRequest)
-    const result = await execution.response
+    const cancel = () => {
+      void execution.cancel()
+    }
+    signal?.addEventListener("abort", cancel, { once: true })
+    const result = await (
+      signal ? raceWithSignal(execution.response, signal) : execution.response
+    ).finally(() => signal?.removeEventListener("abort", cancel))
 
     if (E.isLeft(result)) {
       const error = result.left
@@ -59,6 +69,9 @@ export const createHoppFetchHook = (
     // Native Response objects can't cross VM boundaries
     return convertRelayResponseToSerializableResponse(result.right)
   }
+  hook.executionSignal = signal
+  hook.executionDeadline = caseDeadline(signal)
+  return hook
 }
 
 /**

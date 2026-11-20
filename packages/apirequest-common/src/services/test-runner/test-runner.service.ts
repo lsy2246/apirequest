@@ -6,6 +6,7 @@ import {
   HoppCollection,
   HoppCollectionVariable,
   Environment,
+  CaseTimeoutError,
   HoppGQLRequest,
   HoppRESTHeaders,
   HoppRESTRequest,
@@ -43,6 +44,13 @@ import {
   setTemporaryVariables,
 } from "~/helpers/runner/temp_envs"
 import { requestHasResult, requestFailed } from "~/helpers/runner/outcome"
+import {
+  casesForRequest,
+  caseTestResult,
+} from "~/helpers/request-cases/automation"
+import { executeRequestCase } from "~/helpers/request-cases/execute"
+import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
+import { getService } from "~/modules/dioc"
 
 // Sentinel errors that unwind the runner: "Test execution stopped" is a user
 // cancel, "…stopped due to error" a stop-on-error halt. Both are normal
@@ -62,6 +70,7 @@ export type TestRunnerOptions = {
  * result tree.
  */
 export type PlannedRequest = {
+  testCase?: import("@apirequest/data").RequestCase
   /** Selection ID — how the run sequence refers to this request. */
   id: string
   request: TestRunnerRequest
@@ -372,10 +381,39 @@ export class TestRunnerService extends Service {
             ancestorTestScripts
           ),
           runOrder
-        ).map((entry) => ({
-          ...entry,
-          collection: this.createResultCollection(entry.collection),
-        }))
+        )
+          .flatMap((entry) => {
+            if (
+              options.selectedRequestIDs &&
+              !options.selectedRequestIDs.includes(
+                entry.request.id ?? entry.request._ref_id ?? ""
+              )
+            )
+              return []
+            const saved = isGQLRequest(entry.request)
+              ? []
+              : casesForRequest(entry.request, options.requestCases)
+            if (!saved.length) return options.casesOnly ? [] : [entry]
+            return saved
+              .filter(
+                (testCase) =>
+                  !options.selectedCaseIDs ||
+                  options.selectedCaseIDs.includes(testCase.id)
+              )
+              .map((testCase) => ({
+                ...entry,
+                id: `${entry.id}::case:${testCase.id}`,
+                request: {
+                  ...entry.request,
+                  name: `${entry.request.name} · ${testCase.name}`,
+                },
+                testCase,
+              }))
+          })
+          .map((entry) => ({
+            ...entry,
+            collection: this.createResultCollection(entry.collection),
+          }))
       ),
       iteration: 0,
       nextRequest: 0,
@@ -384,6 +422,13 @@ export class TestRunnerService extends Service {
       baseEnvironment: cloneDeep(captureInitialEnvironmentState()),
     }
     tab.value.document.recovery = options.recovery
+    if (!options.recovery.plan.length) {
+      tab.value.document.status = "error"
+      tab.value.document.runError = "No test cases selected"
+      this.runControls.delete(tabID)
+      this.activeRunStops.delete(tabID)
+      return options.onProgress?.()
+    }
     const execute = () =>
       this.runTestIterations(tab, collection, options, resolvedIterations)
     return (options.onProgress ? options.onProgress().then(execute) : execute())
@@ -675,21 +720,32 @@ export class TestRunnerService extends Service {
           }
         await options.onProgress?.()
         try {
-          await this.runTestRequest(
-            tab,
-            entry.request,
-            entry.collection,
-            options,
-            // Result rows are allocated in this same order: plan index = row.
-            [index],
-            iterationMeta,
-            iterationVars,
-            entry.inheritedVariables,
-            entry.inheritedPreRequestScripts,
-            entry.inheritedTestScripts,
-            recovery?.environment ?? iterationEnvState,
-            entry.inheritedHeaders
-          )
+          if (entry.testCase) {
+            await this.runCase(
+              tab,
+              entry,
+              index,
+              options,
+              iterationMeta,
+              iterationVars
+            )
+          } else {
+            await this.runTestRequest(
+              tab,
+              entry.request,
+              entry.collection,
+              options,
+              // Result rows are allocated in this same order: plan index = row.
+              [index],
+              iterationMeta,
+              iterationVars,
+              entry.inheritedVariables,
+              entry.inheritedPreRequestScripts,
+              entry.inheritedTestScripts,
+              recovery?.environment ?? iterationEnvState,
+              entry.inheritedHeaders
+            )
+          }
         } finally {
           const result = tab.value.document.resultCollection!.requests[
             index
@@ -703,7 +759,12 @@ export class TestRunnerService extends Service {
               for (const scope of ["global", "selected"] as const) {
                 const diff = result.testResults.envDiff[scope]
                 const values = new Map(
-                  state.initialEnvs[scope].map((value) => [value.key, value])
+                  state.initialEnvs[scope].map(
+                    (value: Environment["variables"][number]) => [
+                      value.key,
+                      value,
+                    ]
+                  )
                 )
                 for (const value of diff.deletions) values.delete(value.key)
                 for (const value of [...diff.additions, ...diff.updations])
@@ -751,6 +812,105 @@ export class TestRunnerService extends Service {
       tab.value.document.status = "error"
       console.error("Collection execution failed:", error)
       throw error
+    }
+  }
+
+  private async runCase(
+    tab: Ref<HoppTab<HoppTestRunnerDocument>>,
+    entry: PlannedRequest,
+    index: number,
+    options: TestRunnerOptions,
+    iterationMeta: TestRunnerMeta,
+    iterationVars: Environment["variables"]
+  ) {
+    const path = [index]
+    this.updateRequestAtPath(tab.value.document.resultCollection!, path, {
+      isLoading: true,
+    })
+    try {
+      const result = await executeRequestCase(
+        entry.request as HoppRESTRequest,
+        entry.testCase!,
+        {
+          headers: [],
+          variables: [
+            {
+              parentID: "automation",
+              parentName: entry.collection.name,
+              inheritedVariables: entry.inheritedVariables,
+            },
+          ],
+          scripts: Array.from(
+            {
+              length: Math.max(
+                entry.inheritedPreRequestScripts.length,
+                entry.inheritedTestScripts.length
+              ),
+            },
+            (_, i) => ({
+              parentID: "automation",
+              parentName: entry.collection.name,
+              preRequestScript: entry.inheritedPreRequestScripts[i] ?? "",
+              testScript: entry.inheritedTestScripts[i] ?? "",
+            })
+          ),
+          auth: {
+            parentID: "automation",
+            parentName: entry.collection.name,
+            inheritedAuth: { authType: "none", authActive: false },
+          },
+        },
+        getService(KernelInterceptorService),
+        new AbortController().signal,
+        {
+          executeScripts: options.executeScripts,
+          variables: Object.fromEntries(
+            iterationVars.map((value) => [value.key, value.currentValue])
+          ),
+          environment: options.recovery?.environment?.initialEnvs,
+        }
+      )
+      const testResults = caseTestResult(result)
+      const passed =
+        result.assertions.filter((item) => item.passed).length +
+        result.scripts.filter((item) => item.passed).length
+      const failed = result.assertions.length + result.scripts.length - passed
+      this.updateRequestAtPath(tab.value.document.resultCollection!, path, {
+        ...(result.response && "req" in result.response
+          ? result.response.req
+          : {}),
+        isLoading: false,
+        testResults,
+        passedTests: passed,
+        failedTests: failed,
+        response: options.persistResponses ? result.response : null,
+        reportResponse: result.response
+          ? summarizeRunnerResponse(result.response, options.persistResponses)
+          : undefined,
+      })
+      for (const meta of [tab.value.document.testRunnerMeta, iterationMeta]) {
+        meta.completedRequests++
+        meta.totalTests += passed + failed
+        meta.passedTests += passed
+        meta.failedTests += failed
+        meta.totalTime += result.duration
+      }
+    } catch (error) {
+      this.updateRequestAtPath(tab.value.document.resultCollection!, path, {
+        isLoading: false,
+        error: error instanceof Error ? error.message : String(error),
+        reportResponse: {
+          ...summarizeRunnerFailure(
+            error,
+            error instanceof CaseTimeoutError
+              ? "CASE_TIMEOUT"
+              : "CASE_EXECUTION_ERROR"
+          ),
+          ...(error instanceof CaseTimeoutError
+            ? { elapsedMs: error.elapsedMs }
+            : {}),
+        },
+      })
     }
   }
 

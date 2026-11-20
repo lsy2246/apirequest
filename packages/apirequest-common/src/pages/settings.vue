@@ -161,17 +161,12 @@
           <component :is="item" />
         </template>
       </template>
-      <section v-if="!platform.localDesktop" class="workbench-panel p-8">
-        <h3 class="heading">{{ t("settings.access_tokens") }}</h3>
-        <p class="my-3 text-secondaryLight">
-          {{ t("settings.access_tokens_description") }}
-        </p>
-        <HoppButtonSecondary
-          to="/access-tokens"
-          :label="t('settings.access_tokens')"
-          outline
-        />
-      </section>
+      <SiteSettings
+        v-if="isLocalWorkbench() && workbenchSchedulesAvailable()"
+      />
+      <WebhookSettings
+        v-if="isLocalWorkbench() && workbenchSchedulesAvailable()"
+      />
       <WorkbenchDataSync v-if="isLocalWorkbench()" />
     </div>
     <HoppSmartConfirmModal
@@ -191,6 +186,9 @@
 </template>
 
 <script setup lang="ts">
+import SiteSettings from "~/components/workbench/SiteSettings.vue"
+import WebhookSettings from "~/components/workbench/WebhookSettings.vue"
+import { workbenchSchedulesAvailable } from "~/helpers/workbench-mcp"
 import WorkbenchToggle from "~/components/workbench/Toggle.vue"
 import WorkbenchPage from "~/components/workbench/Page.vue"
 import WorkbenchDataSync from "~/components/workbench/DataSync.vue"

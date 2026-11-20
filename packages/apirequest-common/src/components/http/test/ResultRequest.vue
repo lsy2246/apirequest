@@ -82,7 +82,7 @@
         borderColor: 'var(--status-critical-error-color)',
       }"
     >
-      <span> {{ request.error }} </span>
+      <span> {{ timeoutMessage || request.error }} </span>
     </div>
     <HttpTestTestResult
       v-if="request.testResults"
@@ -102,6 +102,7 @@ import { TestRunnerRequest } from "~/services/test-runner/test-runner.service"
 import IconGraphql from "~icons/hopp/graphql"
 import IconChevronRight from "~icons/lucide/chevron-right"
 import IconFolder from "~icons/lucide/folder"
+import { useI18n } from "~/composables/i18n"
 
 const props = withDefaults(
   defineProps<{
@@ -121,6 +122,23 @@ const props = withDefaults(
 )
 
 const isLoading = computed(() => props.request?.isLoading)
+const t = useI18n()
+const timeoutMessage = computed(() => {
+  const detail = props.request.reportResponse?.errorDetails?.find(
+    (error) => error.code === "CASE_TIMEOUT"
+  )?.data
+  if (
+    !detail ||
+    typeof detail !== "object" ||
+    !("timeoutMs" in detail) ||
+    !("elapsedMs" in detail)
+  )
+    return ""
+  return t("request_case.timeout_detail", {
+    limit: Number(detail.timeoutMs),
+    elapsed: Number(detail.elapsedMs),
+  })
+})
 
 const statusCategory = computed(() => {
   if (

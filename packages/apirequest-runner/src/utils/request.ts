@@ -272,14 +272,17 @@ export const processRequest =
     // (test-runner, effectiveRequest builder) receive a well-shaped
     // HoppEnvs even if the pre-request script fails.
     let updatedEnvs: HoppEnvs = processedEnvs;
+    params.signal?.throwIfAborted();
 
     const preRequestRes = await preRequestScriptRunner(
       request,
       processedEnvs,
 
       collectionVariables,
-      inheritedPreRequestScripts
+      inheritedPreRequestScripts,
+      params.signal
     )();
+    params.signal?.throwIfAborted();
     if (E.isLeft(preRequestRes)) {
       printPreRequestRunner.fail();
 
@@ -291,7 +294,10 @@ export const processRequest =
 
       // REQUEST_ERROR here means the request could not be constructed
       // (GraphQL subscription / invalid variables) — nothing to send
-      if (preRequestRes.left.code === "REQUEST_ERROR") {
+      if (
+        preRequestRes.left.code === "REQUEST_ERROR" ||
+        params.haltOnPreRequestError
+      ) {
         result.report = report;
         return result;
       }
@@ -302,6 +308,7 @@ export const processRequest =
 
     // Creating request-config for request-runner.
     const requestConfig = createRequest(effectiveRequest);
+    if (params.signal) requestConfig.signal = params.signal;
     report.method = String(requestConfig.method ?? request.method);
     report.endpoint = requestConfig.url ?? request.endpoint;
 
@@ -322,6 +329,7 @@ export const processRequest =
     const requestRunnerRes = await delayPromiseFunction<
       E.Either<HoppCLIError, RequestRunnerResponse>
     >(requestRunner(requestConfig), delay);
+    params.signal?.throwIfAborted();
     if (E.isLeft(requestRunnerRes)) {
       // Updating report for errors & current result
       report.errors.push(requestRunnerRes.left);
@@ -352,9 +360,11 @@ export const processRequest =
 
       inheritedTestScripts
     );
+    testScriptParams.signal = params.signal;
 
     // Executing test-runner.
     const testRunnerRes = await testRunner(testScriptParams)();
+    params.signal?.throwIfAborted();
     if (E.isLeft(testRunnerRes)) {
       printTestRunner.fail();
 

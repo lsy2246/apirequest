@@ -28,6 +28,8 @@ import { McpDomainService } from './domain.service';
 import { workbenchEvents } from '../workbench-events';
 import { WorkbenchDataSyncService } from './data-sync.service';
 import { WorkspaceIndexService } from './workspace-index.service';
+import { AutomationWebhookService } from './automation-webhook.service';
+import { SiteSettingsService } from 'src/site-settings/site-settings.service';
 
 type OwnerRequest = Request & { user: AuthUser };
 @Controller({ path: 'workbench-mcp', version: '1' })
@@ -40,6 +42,8 @@ export class WorkbenchMcpController {
     private readonly automation: WorkbenchAutomationService,
     private readonly dataSync: WorkbenchDataSyncService,
     private readonly workspaceIndex: WorkspaceIndexService,
+    private readonly webhooks: AutomationWebhookService,
+    private readonly site: SiteSettingsService,
   ) {}
   private local(req: Request) {
     const policy = getLocalWorkspaceConfig(this.config);
@@ -90,7 +94,10 @@ export class WorkbenchMcpController {
   @Post('collections/requests/batch')
   @HttpCode(200)
   @UseGuards(JwtAuthGuard)
-  async collectionRequests(@Req() req: OwnerRequest, @Body() body: { ids?: unknown }) {
+  async collectionRequests(
+    @Req() req: OwnerRequest,
+    @Body() body: { ids?: unknown },
+  ) {
     this.owner(req);
     return this.workspaceIndex.requests(req.user.uid, body?.ids);
   }
@@ -185,6 +192,87 @@ export class WorkbenchMcpController {
     entity(kind);
     return this.domain.get(kind, id, req.user.uid);
   }
+  @Get('site-settings')
+  @UseGuards(JwtAuthGuard)
+  siteSettings(@Req() req: OwnerRequest) {
+    this.owner(req);
+    return this.site.get();
+  }
+
+  @Post('site-settings')
+  @UseGuards(JwtAuthGuard)
+  saveSiteSettings(@Req() req: OwnerRequest, @Body() body: unknown) {
+    this.owner(req);
+    return this.site.save(req.user.uid, body);
+  }
+
+  @Get('automation/notification-channels')
+  @UseGuards(JwtAuthGuard)
+  notificationChannels(@Req() req: OwnerRequest) {
+    this.owner(req);
+    return this.webhooks.channels(req.user.uid);
+  }
+
+  @Post('automation/notification-channels')
+  @UseGuards(JwtAuthGuard)
+  createNotificationChannel(@Req() req: OwnerRequest, @Body() body: unknown) {
+    this.owner(req);
+    return this.webhooks.saveChannel(req.user.uid, body);
+  }
+
+  @Post('automation/notification-channels/:id')
+  @UseGuards(JwtAuthGuard)
+  updateNotificationChannel(
+    @Req() req: OwnerRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    this.owner(req);
+    return this.webhooks.saveChannel(req.user.uid, body, id);
+  }
+
+  @Post('automation/notification-channels/:id/delete')
+  @UseGuards(JwtAuthGuard)
+  deleteNotificationChannel(@Req() req: OwnerRequest, @Param('id') id: string) {
+    this.owner(req);
+    return this.webhooks.deleteChannel(req.user.uid, id);
+  }
+
+  @Post('automation/notification-channels/:id/test')
+  @UseGuards(JwtAuthGuard)
+  testNotificationChannel(@Req() req: OwnerRequest, @Param('id') id: string) {
+    this.owner(req);
+    return this.webhooks.test(req.user.uid, id);
+  }
+
+  @Get('automation/webhook')
+  @UseGuards(JwtAuthGuard)
+  webhook(@Req() req: OwnerRequest) {
+    this.owner(req);
+    return this.webhooks.get(req.user.uid);
+  }
+
+  @Post('automation/webhook')
+  @UseGuards(JwtAuthGuard)
+  saveWebhook(@Req() req: OwnerRequest, @Body() body: unknown) {
+    this.owner(req);
+    return this.webhooks.save(req.user.uid, body);
+  }
+
+  @Post('automation/webhook/test')
+  @UseGuards(JwtAuthGuard)
+  testWebhook(@Req() req: OwnerRequest) {
+    this.owner(req);
+    return this.webhooks.test(req.user.uid);
+  }
+
+  @Post('automation/webhook/notify')
+  @UseGuards(JwtAuthGuard)
+  notifyWebhook(@Req() req: OwnerRequest, @Body() body: unknown) {
+    this.owner(req);
+    return this.webhooks.manual(req.user.uid, body);
+  }
+
   @Get('automation/schedules')
   @UseGuards(JwtAuthGuard)
   schedules(@Req() req: OwnerRequest) {

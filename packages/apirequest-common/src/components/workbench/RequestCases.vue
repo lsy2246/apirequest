@@ -221,6 +221,27 @@
             <p class="text-tiny leading-relaxed text-secondaryLight">
               {{ t("request_case.variable_hint") }}
             </p>
+            <label class="case-label">
+              {{ t("request_case.timeout_label") }}
+              <input
+                :value="draft.timeoutMs ?? ''"
+                type="number"
+                min="1"
+                :max="MAX_CASE_TIMEOUT_MS"
+                step="1"
+                class="case-field"
+                :placeholder="t('request_case.timeout_inherit')"
+                @input="
+                  draft.timeoutMs =
+                    ($event.target as HTMLInputElement).value === ''
+                      ? undefined
+                      : Number(($event.target as HTMLInputElement).value)
+                "
+              />
+            </label>
+            <p class="text-tiny leading-relaxed text-secondaryLight">
+              {{ t("request_case.timeout_help") }}
+            </p>
             <h3 class="font-medium">{{ t("request_case.variables") }}</h3>
             <CaseFields
               v-model="variableRows"
@@ -377,6 +398,7 @@
             {{
               scriptOptions.find((item) => item.value === entry.scripts)?.label
             }}
+            <span v-if="entry.timeoutMs"> · {{ entry.timeoutMs }} ms</span>
           </p>
           <p
             v-if="results[entry.id]"
@@ -509,29 +531,49 @@
 </template>
 
 <script setup lang="ts">
-import { useService } from "dioc/vue";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { cloneDeep } from "lodash-es";
-import type { HoppRESTRequest } from "@apirequest/data";
-import { useI18n } from "~/composables/i18n";
-import { useWorkbenchRequestCases } from "~/composables/workbenchRequestCases";
-import type { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties";
-import { CaseSchema, caseBody, expectedValue, newRequestCase, type RequestCase, type CasePatch, type CaseBody, type CaseVariableChoice } from "~/helpers/request-cases/model";
-import { executeRequestCase, type CaseRunResult } from "~/helpers/request-cases/execute";
-import { requestErrorFeedback } from "~/helpers/request-feedback";
-import { KernelInterceptorService } from "~/services/kernel-interceptor.service";
-import CaseSelect from "./Select.vue";
-import CaseFields from "./CaseFields.vue";
-import CaseVariableInput from "./CaseVariableInput.vue";
-import { useReadonlyStream } from "~/composables/stream";
-import { environments$, globalEnv$, selectedEnvironmentIndex$ } from "~/newstore/environments";
-import CaseFilePicker from "./CaseFilePicker.vue";
-import IconPencil from "~icons/lucide/pencil";
-import IconPlay from "~icons/lucide/play";
-import IconPlus from "~icons/lucide/plus";
-import IconTrash from "~icons/lucide/trash-2";
-import IconCheck from "~icons/lucide/check";
-import IconX from "~icons/lucide/x";
+import { useService } from "dioc/vue"
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
+import { cloneDeep } from "lodash-es"
+import {
+  MAX_CASE_TIMEOUT_MS,
+  CaseTimeoutError,
+  type HoppRESTRequest,
+} from "@apirequest/data"
+import { useI18n } from "~/composables/i18n"
+import { useWorkbenchRequestCases } from "~/composables/workbenchRequestCases"
+import type { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties"
+import {
+  CaseSchema,
+  caseBody,
+  expectedValue,
+  newRequestCase,
+  type RequestCase,
+  type CasePatch,
+  type CaseBody,
+  type CaseVariableChoice,
+} from "~/helpers/request-cases/model"
+import {
+  executeRequestCase,
+  type CaseRunResult,
+} from "~/helpers/request-cases/execute"
+import { requestErrorFeedback } from "~/helpers/request-feedback"
+import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
+import CaseSelect from "./Select.vue"
+import CaseFields from "./CaseFields.vue"
+import CaseVariableInput from "./CaseVariableInput.vue"
+import { useReadonlyStream } from "~/composables/stream"
+import {
+  environments$,
+  globalEnv$,
+  selectedEnvironmentIndex$,
+} from "~/newstore/environments"
+import CaseFilePicker from "./CaseFilePicker.vue"
+import IconPencil from "~icons/lucide/pencil"
+import IconPlay from "~icons/lucide/play"
+import IconPlus from "~icons/lucide/plus"
+import IconTrash from "~icons/lucide/trash-2"
+import IconCheck from "~icons/lucide/check"
+import IconX from "~icons/lucide/x"
 const props = defineProps<{
   request: HoppRESTRequest
   requestId?: string
@@ -857,13 +899,18 @@ async function runCases(entries: RequestCase[]) {
       const feedback = requestErrorFeedback(e)
       results.value[entry.id] = {
         error:
-          feedback.kind === "cancelled"
-            ? t("request_case.cancelled")
-            : feedback.kind === "timeout"
-              ? t("request_case.timeout")
-              : e instanceof Error && e.message.startsWith("case_")
-                ? translateError(e.message)
-                : t("workbench.case_network_error"),
+          e instanceof CaseTimeoutError
+            ? t("request_case.timeout_detail", {
+                limit: e.timeoutMs,
+                elapsed: e.elapsedMs,
+              })
+            : feedback.kind === "cancelled"
+              ? t("request_case.cancelled")
+              : feedback.kind === "timeout"
+                ? t("request_case.timeout")
+                : e instanceof Error && e.message.startsWith("case_")
+                  ? translateError(e.message)
+                  : t("workbench.case_network_error"),
       }
     }
   }

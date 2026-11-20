@@ -60,6 +60,15 @@
           ></span
         >
         <span class="report-summary flex flex-wrap gap-4 text-tiny">
+          <span
+            v-if="report.notification"
+            :class="
+              ['failed', 'partial'].includes(report.notification.status)
+                ? 'text-red-500'
+                : 'text-secondaryLight'
+            "
+            >{{ t(`automation_webhook.${report.notification.status}`) }}</span
+          >
           <span v-if="report.kind === 'automation'" class="text-accent">{{
             reportStatusLabel(report)
           }}</span>
@@ -111,6 +120,28 @@
           @click="requestDelete(report)"
         />
       </div>
+      <details
+        v-if="report.notification?.channels?.length"
+        class="col-span-full text-xs text-secondaryLight"
+      >
+        <summary class="cursor-pointer">
+          {{ t("automation_webhook.delivery_details") }}
+        </summary>
+        <ul class="mt-2 space-y-2">
+          <li
+            v-for="delivery in report.notification.channels"
+            :key="delivery.channelID"
+            :class="delivery.status === 'failed' ? 'text-red-500' : ''"
+          >
+            {{ delivery.name }} ·
+            {{ t(`automation_webhook.${delivery.status}`) }} ·
+            {{ t("automation_webhook.attempts") }} {{ delivery.attempts }}
+            <span v-if="delivery.error" class="block break-words">{{
+              delivery.error
+            }}</span>
+          </li>
+        </ul>
+      </details>
     </div>
     <WorkbenchReportDetails
       v-if="selectedReport"
@@ -194,7 +225,26 @@ const scheduledReports = ref<WorkbenchReport[]>([])
 const loading = ref(false)
 const error = ref("")
 const filtered = computed(() =>
-  [...reports.value, ...scheduledReports.value]
+  [
+    ...new Map([
+      ...scheduledReports.value.map((report) => [report.id, report] as const),
+      ...reports.value.map((report) => {
+        const remote = scheduledReports.value.find(
+          (item) => item.id === report.id
+        )
+        return [
+          report.id,
+          remote
+            ? {
+                ...report,
+                backendStored: true,
+                notification: remote.notification,
+              }
+            : report,
+        ] as const
+      }),
+    ]).values(),
+  ]
     .filter((report) => !props.kind || report.kind === props.kind)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 )
@@ -205,7 +255,7 @@ const deleteReport = async () => {
   deleting.value = true
   deleteError.value = ""
   try {
-    if (report.trigger === "schedule") {
+    if (report.trigger === "schedule" || report.backendStored) {
       await workbenchMcpAPI(
         `automation/reports/${encodeURIComponent(report.id)}/delete`,
         {}
@@ -214,6 +264,7 @@ const deleteReport = async () => {
       scheduledReports.value = scheduledReports.value.filter(
         (item) => item.id !== report.id
       )
+      await remove(report.id)
     } else {
       await remove(report.id)
       if (report.runTabID && report.automation?.status === "paused") {

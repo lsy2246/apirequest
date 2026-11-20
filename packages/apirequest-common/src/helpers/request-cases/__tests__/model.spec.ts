@@ -3,6 +3,7 @@ import { getDefaultRESTRequest } from "@apirequest/data"
 import {
   buildCaseRequest,
   CaseMapSchema,
+  CaseSchema,
   newRequestCase,
   evaluateAssertions,
   readCaseFile,
@@ -27,6 +28,13 @@ const response = {
 }
 
 describe("request case model", () => {
+  it("keeps the time limit optional and rejects invalid limits", () => {
+    const entry = newRequestCase()
+    expect(entry.timeoutMs).toBeUndefined()
+    expect(CaseSchema.parse({ ...entry, timeoutMs: 1234 }).timeoutMs).toBe(1234)
+    for (const timeoutMs of [0, -1, 1.5, 3600001])
+      expect(CaseSchema.safeParse({ ...entry, timeoutMs }).success).toBe(false)
+  })
   it("migrates legacy variables/status without enabling previously skipped scripts", () => {
     const map = CaseMapSchema.parse({
       request: [

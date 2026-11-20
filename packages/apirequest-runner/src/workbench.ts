@@ -52,6 +52,7 @@ export type WorkbenchRecovery = {
     collection: CollectionTree;
     envs: HoppEnvs;
     config: Partial<AutomationConfig>;
+    caseEnvironments?: Record<string, HoppEnvs["selected"]>;
   };
   envs: HoppEnvs;
   results: RequestReport[];
@@ -81,6 +82,7 @@ export async function runWorkbenchAutomation(
     collection: CollectionTree;
     envs: HoppEnvs;
     config: Partial<AutomationConfig>;
+    caseEnvironments?: Record<string, HoppEnvs["selected"]>;
   },
   onProgress?: (progress: WorkbenchAutomationProgress) => void | Promise<void>,
   beforeRequest?: (pauseForError?: boolean) => Promise<void>
@@ -96,9 +98,32 @@ export async function runWorkbenchAutomation(
     return report;
   };
   const count = (tree: CollectionTree): number =>
-    tree.requests.length +
-    tree.folders.reduce((sum, folder) => sum + count(folder), 0);
+    tree.requests.reduce((sum, request) => {
+      if (
+        config.selectedRequestIDs &&
+        !config.selectedRequestIDs.includes(
+          String(request.id ?? request._ref_id)
+        )
+      )
+        return sum;
+      const saved =
+        config.requestCases?.[String(request.id ?? request._ref_id)] ?? [];
+      return (
+        sum +
+        (saved.length
+          ? saved.filter(
+              (entry) =>
+                !config.selectedCaseIDs ||
+                config.selectedCaseIDs.includes(entry.id)
+            ).length
+          : config.casesOnly
+            ? 0
+            : 1)
+      );
+    }, 0) + tree.folders.reduce((sum, folder) => sum + count(folder), 0);
   const total = count(input.collection) * config.iterations;
+  if (config.requestCases && total === 0)
+    throw new Error("No test cases selected");
   const recovery: WorkbenchRecovery = input.recovery
     ? snapshot(input.recovery)
     : {
@@ -119,6 +144,12 @@ export async function runWorkbenchAutomation(
     recovery: snapshot(recovery),
   });
   const results = await collectionsRunner({
+    requestCases: config.requestCases,
+    selectedCaseIDs: config.selectedCaseIDs,
+    selectedRequestIDs: config.selectedRequestIDs,
+    casesOnly: config.casesOnly,
+    caseEnvironments: input.caseEnvironments,
+    executeCaseScripts: config.executeScripts,
     collections: [fromTree(input.collection, config.executeScripts)],
     envs,
     initialEnvs: recovery.input.envs,

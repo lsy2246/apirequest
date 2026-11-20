@@ -22,6 +22,7 @@ type HoppErrors = {
   TESTS_FAILING: HoppErrorData;
   SYNTAX_ERROR: HoppErrorData;
   REQUEST_ERROR: HoppErrorData & { duration?: number };
+  CASE_TIMEOUT: HoppErrorData;
   INVALID_ARGUMENT: HoppErrorData;
   MALFORMED_ENV_FILE: HoppErrorPath & HoppErrorData;
   BULK_ENV_FILE: HoppErrorPath & HoppErrorData;

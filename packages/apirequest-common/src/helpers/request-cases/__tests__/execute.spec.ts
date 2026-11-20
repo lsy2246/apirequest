@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { getDefaultRESTRequest } from "@apirequest/data"
 import * as E from "fp-ts/Either"
-const requestFixture = () => ({ ...getDefaultRESTRequest(), endpoint: "http://example.test" })
+const requestFixture = () => ({
+  ...getDefaultRESTRequest(),
+  endpoint: "http://example.test",
+})
 vi.mock("~/modules/dioc", () => ({ getService: vi.fn() }))
 vi.mock("~/services/cookie-jar.service", () => ({ CookieJarService: class {} }))
 vi.mock("~/platform", () => ({
@@ -88,6 +91,69 @@ beforeEach(() => {
   }))
 })
 describe("case execution", () => {
+  it("uses the case limit and cancels an active request", async () => {
+    const entry = { ...newRequestCase(), timeoutMs: 30 }
+    const cancel = vi.fn()
+    const execute = vi.fn(() => ({ cancel, response: new Promise(() => {}) }))
+    await expect(
+      executeRequestCase(
+        requestFixture(),
+        entry,
+        undefined,
+        { execute } as any,
+        new AbortController().signal
+      )
+    ).rejects.toMatchObject({
+      code: "CASE_TIMEOUT",
+      timeoutMs: 30,
+      elapsedMs: expect.any(Number),
+    })
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(mocks.post).not.toHaveBeenCalled()
+  })
+
+  it("times out setup and never sends a late main request after the script resolves", async () => {
+    let finish: any
+    mocks.pre.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const execute = vi.fn()
+    await expect(
+      executeRequestCase(
+        requestFixture(),
+        { ...newRequestCase(), timeoutMs: 30 },
+        undefined,
+        { execute } as any,
+        new AbortController().signal
+      )
+    ).rejects.toMatchObject({ code: "CASE_TIMEOUT", timeoutMs: 30 })
+    finish(E.right({ updatedEnvs: initial() }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(execute).not.toHaveBeenCalled()
+    expect(mocks.pre.mock.calls[0][4].aborted).toBe(true)
+  })
+
+  it("includes post-request checks in the same deadline and forwards cancellation to script fetches", async () => {
+    mocks.post.mockImplementation(() => new Promise(() => {}))
+    const execute = vi.fn(() => ({
+      cancel: vi.fn(),
+      response: Promise.resolve(network()),
+    }))
+    await expect(
+      executeRequestCase(
+        requestFixture(),
+        { ...newRequestCase(), timeoutMs: 30 },
+        undefined,
+        { execute } as any,
+        new AbortController().signal
+      )
+    ).rejects.toMatchObject({ code: "CASE_TIMEOUT" })
+    expect(mocks.post.mock.calls[0][5].aborted).toBe(true)
+  })
+
   it("checks a full response, inherits scripts and preserves an explicitly empty variable", async () => {
     const entry = newRequestCase()
     entry.variables = { empty: "" }
@@ -241,6 +307,7 @@ describe("case execution", () => {
       { execute } as any,
       controller.signal
     )
+    await vi.waitFor(() => expect(mocks.pre).toHaveBeenCalled())
     controller.abort()
     await expect(promise).rejects.toMatchObject({ name: "AbortError" })
     finish(E.right({ updatedEnvs: initial() }))

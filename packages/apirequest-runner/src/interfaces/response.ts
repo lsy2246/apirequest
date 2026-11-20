@@ -41,6 +41,7 @@ export interface RequestRunnerResponse extends TestResponse {
  * @property {string[]} inheritedTestScripts Test scripts inherited from parent collections.
  */
 export interface TestScriptParams {
+  signal?: AbortSignal;
   request: HoppRESTRequest;
   response: TestResponse;
   envs: HoppEnvs;

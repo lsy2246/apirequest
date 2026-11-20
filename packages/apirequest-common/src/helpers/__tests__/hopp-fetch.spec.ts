@@ -9,6 +9,31 @@ const mockKernelInterceptor: KernelInterceptorService = {
 } as any
 
 describe("Common hopp-fetch", () => {
+  it("cancels script fetches when their case deadline is aborted and blocks subsequent fetches", async () => {
+    const cancel = vi.fn()
+    vi.mocked(mockKernelInterceptor.execute).mockReturnValue({
+      cancel,
+      response: new Promise(() => {}),
+    } as any)
+    const controller = new AbortController()
+    const fetch = createHoppFetchHook(
+      mockKernelInterceptor,
+      undefined,
+      controller.signal
+    )
+    const pending = fetch("https://example.test")
+    await vi.waitFor(() =>
+      expect(mockKernelInterceptor.execute).toHaveBeenCalled()
+    )
+    controller.abort(new Error("case timed out"))
+    await expect(pending).rejects.toThrow("case timed out")
+    expect(cancel).toHaveBeenCalledOnce()
+    await expect(fetch("https://example.test/late")).rejects.toThrow(
+      "case timed out"
+    )
+    expect(mockKernelInterceptor.execute).toHaveBeenCalledOnce()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
 

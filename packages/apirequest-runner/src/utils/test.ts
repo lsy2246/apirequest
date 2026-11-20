@@ -61,7 +61,7 @@ export const testRunner = (
               body,
             };
 
-            const hoppFetchHook = createHoppFetchHook();
+            const hoppFetchHook = createHoppFetchHook(testScriptData.signal);
 
             // Test order: request → root (reverse of pre-request).
             const combinedScript = combineScriptsWithIIFE(

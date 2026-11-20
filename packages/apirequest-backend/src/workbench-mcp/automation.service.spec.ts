@@ -313,6 +313,7 @@ describe('durable automation execution', () => {
       })),
     };
     const collections = {
+      exportUserCollectionsToJSON: jest.fn(),
       exportUserCollectionToJSONObject: jest.fn(async () => ({
         _tag: 'Right',
         right: { id: 'collection', name: 'Suite', requests: [], folders: [] },
@@ -323,8 +324,95 @@ describe('durable automation execution', () => {
       domain as any,
       collections as any,
     );
-    return { service, prisma, rows };
+    return { service, prisma, rows, domain, collections };
   }
+  it('builds one execution tree for selected requests across roots and preserves their ancestor configuration', async () => {
+    const { service, domain, collections } = executionFixture();
+    domain.get.mockResolvedValue({
+      name: 'Cases',
+      collectionID: 'one',
+      config: { selectedRequestIDs: ['first', 'second'], casesOnly: true },
+    });
+    collections.exportUserCollectionsToJSON.mockResolvedValue({
+      _tag: 'Right',
+      right: {
+        exportedCollection: JSON.stringify([
+          {
+            id: 'one',
+            name: 'One',
+            data: '{"headers":[{"key":"X-Group","value":"one"}]}',
+            requests: [{ id: 'unselected' }],
+            folders: [
+              {
+                id: 'nested',
+                name: 'Nested',
+                data: '{"variables":[]}',
+                requests: [{ id: 'first' }],
+                folders: [],
+              },
+            ],
+          },
+          {
+            id: 'two',
+            name: 'Two',
+            data: '{"headers":[]}',
+            requests: [{ id: 'second' }],
+            folders: [],
+          },
+        ]),
+      },
+    });
+    const run = jest
+      .spyOn(service as any, 'run')
+      .mockResolvedValue({
+        steps: [],
+        summary: { completed: 0, failed: 0, elapsedMs: 1 },
+        automation: {
+          status: 'completed',
+          passedTests: 0,
+          failedTests: 0,
+          totalTests: 0,
+        },
+      });
+    await (service as any).execute(
+      'owner',
+      { planID: 'plan', environmentID: null },
+      Date.now(),
+    );
+    const input = run.mock.calls[0][0] as any;
+    expect(input.collection.folders.map((folder) => folder.id)).toEqual([
+      'one',
+      'two',
+    ]);
+    expect(input.collection.folders[0]).toMatchObject({
+      data: '{"headers":[{"key":"X-Group","value":"one"}]}',
+      requests: [],
+      folders: [{ id: 'nested', requests: [{ id: 'first' }] }],
+    });
+    expect(input.collection.folders[1].requests).toEqual([{ id: 'second' }]);
+  });
+
+  it('does not run when a selected request is absent from the owner workspace', async () => {
+    const { service, domain, collections, rows } = executionFixture();
+    domain.get.mockResolvedValue({
+      name: 'Cases',
+      collectionID: 'one',
+      config: { selectedRequestIDs: ['foreign'], casesOnly: true },
+    });
+    collections.exportUserCollectionsToJSON.mockResolvedValue({
+      _tag: 'Right',
+      right: { exportedCollection: '[]' },
+    });
+    const run = jest.spyOn(service as any, 'run');
+    await (service as any).execute(
+      'owner',
+      { planID: 'plan', environmentID: null },
+      Date.now(),
+    );
+    expect(run).not.toHaveBeenCalled();
+    expect(JSON.parse([...rows.values()][0].value).summary.failed).toBe(1);
+  });
+
   it('creates the report before execution and retains completed failures on a timeout', async () => {
     const { service, rows } = executionFixture();
     const step = {

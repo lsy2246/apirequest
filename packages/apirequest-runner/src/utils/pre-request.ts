@@ -57,12 +57,13 @@ export const preRequestScriptRunner = (
   envs: HoppEnvs,
 
   collectionVariables?: HoppCollectionVariable[],
-  inheritedPreRequestScripts: string[] = []
+  inheritedPreRequestScripts: string[] = [],
+  signal?: AbortSignal
 ): TE.TaskEither<
   HoppCLIError,
   { effectiveRequest: EffectiveHoppRESTRequest } & { updatedEnvs: HoppEnvs }
 > => {
-  const hoppFetchHook = createHoppFetchHook();
+  const hoppFetchHook = createHoppFetchHook(signal);
 
   // Pre-request order: root → request.
   const combinedScript = combineScriptsWithIIFE(

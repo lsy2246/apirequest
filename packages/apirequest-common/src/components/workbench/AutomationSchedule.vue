@@ -1,5 +1,6 @@
 <template>
   <FormFrame
+    wide
     :embedded="embedded"
     :title="
       plan
@@ -12,210 +13,168 @@
       <form
         id="workbench-automation-schedule"
         ref="form"
-        class="space-y-4"
+        class="grid gap-6 md:grid-cols-2"
         :inert="saving"
         :aria-busy="saving"
         @submit.prevent="save()"
       >
-        <fieldset class="min-w-0 space-y-1">
-          <legend>{{ t("workbench_schedule.target") }}</legend>
-          <ul
-            v-if="visibleRows.length"
-            class="max-h-56 overflow-y-auto rounded border border-divider py-1"
-          >
-            <li
-              v-for="row in visibleRows"
-              :key="row.key"
-              class="flex items-center gap-1 pr-1"
-              :style="{
-                paddingInlineStart: `${Math.min(row.parents.length, 8) * 0.75}rem`,
-              }"
-            >
-              <button
-                v-if="row.expandable"
-                type="button"
-                class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-secondaryLight hover:bg-primaryLight"
-                :aria-label="row.name"
-                :aria-expanded="expanded.has(row.key)"
-                @click="toggleGroup(row.key)"
-              >
-                <IconChevronRight
-                  class="svg-icons transition-transform"
-                  :class="{ 'rotate-90': expanded.has(row.key) }"
-                  aria-hidden="true"
-                />
-              </button>
-              <span v-else class="w-7 shrink-0" aria-hidden="true" />
-
-              <button
-                type="button"
-                class="flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-primaryLight disabled:opacity-50"
-                :class="{ 'bg-accent/10 text-accent': selectedKey === row.key }"
-                :aria-pressed="selectedKey === row.key"
-                :disabled="!row.id || !row.collectionID"
-                :title="row.path"
-                @click="selectedKey = row.key"
-              >
-                <component
-                  :is="expanded.has(row.key) ? IconFolderOpen : IconFolder"
-                  v-if="row.kind === 'group'"
-                  class="svg-icons shrink-0"
-                  aria-hidden="true"
-                />
-                <span
-                  v-else-if="row.method"
-                  class="shrink-0 font-mono text-tiny font-semibold"
-                  :style="{ color: getMethodLabelColor(row.method) }"
-                >
-                  {{ row.method }}
-                </span>
-                <IconGraphql
-                  v-else
-                  class="svg-icons shrink-0 text-accent"
-                  aria-hidden="true"
-                />
-                <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
-                <IconCheck
-                  v-if="selectedKey === row.key"
-                  class="svg-icons shrink-0"
-                  aria-hidden="true"
-                />
-              </button>
-            </li>
-          </ul>
-          <p
-            v-else
-            class="rounded border border-divider p-2 text-xs text-secondaryLight"
-          >
-            {{ t("documentation.no_requests_or_folders") }}
-          </p>
-          <p
-            v-if="selectedTarget"
-            aria-live="polite"
-            class="pt-1 text-xs text-secondaryLight [overflow-wrap:anywhere]"
-          >
-            {{ selectedTarget.path }}
-          </p>
-        </fieldset>
-        <p v-if="plan && !selectedTarget" role="alert" class="text-red-500">
-          {{ t("workbench_schedule.target_missing") }}
-        </p>
-        <label class="block space-y-1">
-          <span>{{ t("workbench_schedule.environment") }}</span>
-          <WorkbenchSelect
-            v-model="environmentID"
-            :label="t('workbench_schedule.environment')"
-            :options="environmentOptions"
+        <div class="min-w-0">
+          <AutomationCaseSelector
+            v-model="selectedCaseIDs"
+            :collections="collections"
+            :cases="availableCases"
           />
-        </label>
-        <p
-          v-if="schedulingAvailable && type !== 'off' && environmentID"
-          class="text-xs text-secondaryLight"
-        >
-          {{ t("workbench_schedule.values_notice") }}
-        </p>
-        <fieldset class="space-y-3 border-t border-divider pt-4">
-          <legend class="font-semibold">
-            {{ t("collection_runner.run_config") }}
-          </legend>
-          <div class="grid gap-3 sm:grid-cols-2">
-            <label class="block space-y-1">
-              <span>{{ t("collection_runner.iterations") }}</span>
-              <input
-                v-model.number="config.iterations"
-                name="iterations"
-                type="number"
-                class="input w-full"
-                min="1"
-                max="1000"
-                step="1"
-                required
-              />
-            </label>
-            <label class="block space-y-1">
-              <span>{{ t("collection_runner.delay") }} · ms</span>
-              <input
-                v-model.number="config.delay"
-                name="delay"
-                type="number"
-                class="input w-full"
-                min="0"
-                max="60000"
-                step="1"
-                required
-              />
-            </label>
-          </div>
-          <div class="flex flex-col items-start gap-3">
-            <WorkbenchToggle v-model="config.stopOnError">{{
-              t("collection_runner.stop_on_error")
-            }}</WorkbenchToggle>
-            <WorkbenchToggle v-model="config.persistResponses">{{
-              t("collection_runner.persist_responses")
-            }}</WorkbenchToggle>
-            <WorkbenchToggle v-model="config.executeScripts">{{
-              t("collection_runner.execute_scripts")
-            }}</WorkbenchToggle>
-            <WorkbenchToggle v-model="config.keepVariableValues">{{
-              t("workbench_schedule.keep_variable_values")
-            }}</WorkbenchToggle>
-          </div>
-          <p class="text-xs text-secondaryLight">
-            {{ t("workbench_schedule.keep_variable_values_notice") }}
-          </p>
-        </fieldset>
-        <h4
-          v-if="schedulingAvailable"
-          class="border-t border-divider pt-4 font-semibold"
-        >
-          {{ t("workbench_schedule.title") }}
-        </h4>
-        <label v-if="schedulingAvailable" class="block space-y-1">
-          <span>{{ t("workbench_schedule.rule") }}</span>
-          <WorkbenchSelect
-            v-model="type"
-            :label="t('workbench_schedule.rule')"
-            :options="ruleOptions"
-          />
-        </label>
-        <label
-          v-if="schedulingAvailable && type === 'interval'"
-          class="block space-y-1"
-        >
-          <span>{{ t("workbench_schedule.minutes") }}</span>
-          <input
-            v-model.number="minutes"
-            type="number"
-            class="input w-full"
-            min="1"
-            max="10080"
-            required
-          />
-        </label>
-        <div
-          v-else-if="schedulingAvailable && type !== 'off'"
-          class="space-y-3"
-        >
-          <label v-if="type === 'weekly'" class="block space-y-1">
-            <span>{{ t("workbench_schedule.weekday") }}</span>
+        </div>
+        <div class="min-w-0 space-y-4">
+          <label class="block space-y-1">
+            <span>{{ t("workbench_schedule.environment") }}</span>
             <WorkbenchSelect
-              :model-value="String(weekday)"
-              :label="t('workbench_schedule.weekday')"
-              :options="
-                weekdays.map((day) => ({
-                  value: String(day.value),
-                  label: day.label,
-                }))
-              "
-              @update:model-value="weekday = Number($event)"
+              v-model="environmentID"
+              :label="t('workbench_schedule.environment')"
+              :options="environmentOptions"
             />
           </label>
-          <label class="block space-y-1">
-            <span>{{ t("workbench_schedule.time") }} · {{ timezone }}</span>
-            <input v-model="time" type="time" class="input w-full" required />
+          <p
+            v-if="schedulingAvailable && type !== 'off' && environmentID"
+            class="text-xs text-secondaryLight"
+          >
+            {{ t("workbench_schedule.values_notice") }}
+          </p>
+          <fieldset class="space-y-3 border-t border-divider pt-4">
+            <legend class="font-semibold">
+              {{ t("collection_runner.run_config") }}
+            </legend>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="block space-y-1">
+                <span>{{ t("collection_runner.iterations") }}</span>
+                <input
+                  v-model.number="config.iterations"
+                  name="iterations"
+                  type="number"
+                  class="input w-full"
+                  min="1"
+                  max="1000"
+                  step="1"
+                  required
+                />
+              </label>
+              <label class="block space-y-1">
+                <span>{{ t("collection_runner.delay") }} · ms</span>
+                <input
+                  v-model.number="config.delay"
+                  name="delay"
+                  type="number"
+                  class="input w-full"
+                  min="0"
+                  max="60000"
+                  step="1"
+                  required
+                />
+              </label>
+            </div>
+            <div class="flex flex-col items-start gap-3">
+              <WorkbenchToggle v-model="config.stopOnError">{{
+                t("collection_runner.stop_on_error")
+              }}</WorkbenchToggle>
+              <WorkbenchToggle v-model="config.persistResponses">{{
+                t("collection_runner.persist_responses")
+              }}</WorkbenchToggle>
+              <WorkbenchToggle v-model="config.executeScripts">{{
+                t("collection_runner.execute_scripts")
+              }}</WorkbenchToggle>
+            </div>
+          </fieldset>
+          <fieldset
+            v-if="schedulingAvailable"
+            class="space-y-3 border-t border-divider pt-4"
+          >
+            <legend class="font-semibold">
+              {{ t("automation_webhook.title") }}
+            </legend>
+            <WorkbenchToggle
+              :model-value="config.webhook?.enabled ?? false"
+              @update:model-value="setWebhook('enabled', $event)"
+            >
+              {{ t("automation_webhook.enable") }}
+            </WorkbenchToggle>
+            <template v-if="config.webhook?.enabled">
+              <NotificationChannelPicker
+                ref="notificationPicker"
+                :model-value="config.webhook.channelIDs"
+                @update:model-value="setNotificationChannels"
+              />
+              <p class="text-xs text-secondaryLight">
+                {{ t("automation_webhook.summary_help") }}
+              </p>
+              <WorkbenchToggle
+                :model-value="config.webhook?.includeErrorDetails ?? false"
+                @update:model-value="setWebhook('includeErrorDetails', $event)"
+              >
+                {{ t("automation_webhook.include_details") }}
+              </WorkbenchToggle>
+              <p class="text-xs text-secondaryLight">
+                {{ t("automation_webhook.details_help") }}
+              </p>
+              <router-link
+                to="/settings"
+                class="inline-block text-xs text-accent"
+                >{{ t("automation_webhook.configure") }}</router-link
+              >
+            </template>
+          </fieldset>
+          <h4
+            v-if="schedulingAvailable"
+            class="border-t border-divider pt-4 font-semibold"
+          >
+            {{ t("workbench_schedule.title") }}
+          </h4>
+          <label v-if="schedulingAvailable" class="block space-y-1">
+            <span>{{ t("workbench_schedule.rule") }}</span>
+            <WorkbenchSelect
+              v-model="type"
+              :label="t('workbench_schedule.rule')"
+              :options="ruleOptions"
+            />
           </label>
+          <label
+            v-if="schedulingAvailable && type === 'interval'"
+            class="block space-y-1"
+          >
+            <span>{{ t("workbench_schedule.minutes") }}</span>
+            <input
+              v-model.number="minutes"
+              type="number"
+              class="input w-full"
+              min="1"
+              max="10080"
+              required
+            />
+          </label>
+          <div
+            v-else-if="schedulingAvailable && type !== 'off'"
+            class="space-y-3"
+          >
+            <label v-if="type === 'weekly'" class="block space-y-1">
+              <span>{{ t("workbench_schedule.weekday") }}</span>
+              <WorkbenchSelect
+                :model-value="String(weekday)"
+                :label="t('workbench_schedule.weekday')"
+                :options="
+                  weekdays.map((day) => ({
+                    value: String(day.value),
+                    label: day.label,
+                  }))
+                "
+                @update:model-value="weekday = Number($event)"
+              />
+            </label>
+            <label class="block space-y-1">
+              <span>{{ t("workbench_schedule.time") }} · {{ timezone }}</span>
+              <input v-model="time" type="time" class="input w-full" required />
+            </label>
+          </div>
+          <p v-if="error" role="alert" class="text-red-500">{{ error }}</p>
         </div>
-        <p v-if="error" role="alert" class="text-red-500">{{ error }}</p>
       </form>
     </template>
     <template #footer>
@@ -224,7 +183,7 @@
         type="submit"
         form="workbench-automation-schedule"
         :loading="saving"
-        :disabled="saving || !selectedTarget"
+        :disabled="saving || !selectedChoices.length"
       />
       <HoppButtonSecondary
         :label="t('action.cancel')"
@@ -240,17 +199,18 @@ import { computed, ref, watch } from "vue"
 import FormFrame from "./FormFrame.vue"
 import WorkbenchSelect from "./Select.vue"
 import WorkbenchToggle from "./Toggle.vue"
+import AutomationCaseSelector from "./AutomationCaseSelector.vue"
+import NotificationChannelPicker from "./NotificationChannelPicker.vue"
+import { useWorkbenchRequestCases } from "~/composables/workbenchRequestCases"
+import {
+  collectionCaseChoices,
+  snapshotCases,
+} from "~/helpers/request-cases/automation"
 import {
   AutomationConfigSchema,
   getAutomationConfig,
-  isGQLRequest,
   type HoppCollection,
 } from "@apirequest/data"
-import IconCheck from "~icons/lucide/check"
-import IconChevronRight from "~icons/lucide/chevron-right"
-import IconFolder from "~icons/lucide/folder"
-import IconFolderOpen from "~icons/lucide/folder-open"
-import IconGraphql from "~icons/hopp/graphql"
 import { useService } from "dioc/vue"
 import { useI18n } from "~/composables/i18n"
 import { useReadonlyStream } from "~/composables/stream"
@@ -263,8 +223,6 @@ import {
   type SavedWorkbenchPlan,
 } from "~/helpers/workbench-mcp"
 import { environments$ } from "~/newstore/environments"
-import { isRootRequestCollection } from "~/newstore/collections"
-import { getMethodLabelColor } from "~/helpers/rest/labelColoring"
 import { CurrentValueService } from "~/services/current-environment-value.service"
 import { SecretEnvironmentService } from "~/services/secret-environment.service"
 
@@ -276,116 +234,7 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: "close"): void; (e: "saved"): void }>()
 const t = useI18n()
 const schedulingAvailable = workbenchSchedulesAvailable()
-type TargetRow = {
-  key: string
-  kind: "group" | "request"
-  id?: string
-  collectionID?: string
-  name: string
-  path: string
-  parents: string[]
-  expandable?: boolean
-  method?: string
-}
-
 const { collections } = useWorkbenchCollections()
-const expanded = ref(new Set<string>())
-const selectedKey = ref(
-  props.plan?.requestID
-    ? `request:${props.plan.requestID}`
-    : props.plan?.collectionID
-      ? `group:${props.plan.collectionID}`
-      : ""
-)
-const rows = computed(() => {
-  const result: TargetRow[] = []
-  const append = (
-    collection: HoppCollection,
-    position: string,
-    parents: string[],
-    parentPath: string
-  ) => {
-    const rootRequests =
-      parents.length === 0 && isRootRequestCollection(collection)
-    const collectionID =
-      collection.id ?? (!schedulingAvailable ? collection._ref_id : undefined)
-    const key = `group:${collectionID ?? position}`
-    const path = parentPath
-      ? `${parentPath} / ${collection.name}`
-      : collection.name
-    if (!rootRequests) {
-      result.push({
-        key,
-        kind: "group",
-        id: collectionID,
-        collectionID,
-        name: collection.name,
-        path,
-        parents,
-        expandable:
-          collection.folders.length > 0 ||
-          collection.requests.some(
-            (request) => request.id || (!schedulingAvailable && request._ref_id)
-          ),
-      })
-    }
-
-    const childParents = rootRequests ? parents : [...parents, key]
-    const childPath = rootRequests ? parentPath : path
-    collection.folders.forEach((folder, index) =>
-      append(folder, `${position}/${index}`, childParents, childPath)
-    )
-    for (const request of collection.requests) {
-      const requestID =
-        request.id ?? (!schedulingAvailable ? request._ref_id : undefined)
-      if (!requestID) continue
-      result.push({
-        key: `request:${requestID}`,
-        kind: "request",
-        id: requestID,
-        collectionID,
-        name: request.name,
-        path: childPath ? `${childPath} / ${request.name}` : request.name,
-        parents: childParents,
-        method: isGQLRequest(request) ? undefined : request.method,
-      })
-    }
-  }
-
-  // 接口管理把根目录请求放在分组之后，保持相同的显示层级。
-  const roots = collections.value
-  for (const [index, collection] of roots.entries()) {
-    if (!isRootRequestCollection(collection))
-      append(collection, String(index), [], "")
-  }
-  for (const [index, collection] of roots.entries()) {
-    if (isRootRequestCollection(collection))
-      append(collection, String(index), [], "")
-  }
-  return result
-})
-const visibleRows = computed(() =>
-  rows.value.filter((row) =>
-    row.parents.every((key) => expanded.value.has(key))
-  )
-)
-const selectedTarget = computed(() =>
-  rows.value.find(
-    (row) => row.key === selectedKey.value && row.id && row.collectionID
-  )
-)
-watch(
-  selectedTarget,
-  (target) => {
-    if (target) expanded.value = new Set([...expanded.value, ...target.parents])
-  },
-  { immediate: true }
-)
-
-const toggleGroup = (key: string) => {
-  if (!expanded.value.delete(key)) expanded.value.add(key)
-}
-
 const environments = useReadonlyStream(environments$, [])
 const currentValues = useService(CurrentValueService)
 const secretValues = useService(SecretEnvironmentService)
@@ -409,6 +258,83 @@ const config = ref(
       : {}
   )
 )
+function setWebhook(key: "enabled" | "includeErrorDetails", value: boolean) {
+  config.value.webhook = {
+    enabled: false,
+    includeErrorDetails: false,
+    ...config.value.webhook,
+    [key]: value,
+  }
+}
+const notificationPicker = ref<{ validate: () => Promise<boolean> }>()
+function setNotificationChannels(channelIDs: string[]) {
+  config.value.webhook = {
+    enabled: true,
+    includeErrorDetails: false,
+    ...config.value.webhook,
+    channelIDs,
+  }
+}
+const storedCases = useWorkbenchRequestCases()
+void storedCases.ready.catch(() => {})
+const availableCases = computed(() => ({
+  ...config.value.requestCases,
+  ...storedCases.cases.value,
+}))
+const allChoices = computed(() =>
+  collectionCaseChoices(collections.value, availableCases.value)
+)
+const selectedCaseIDs = ref<string[]>(props.plan?.config?.selectedCaseIDs ?? [])
+let initializedSelection = !!props.plan?.config?.selectedCaseIDs
+watch(
+  allChoices,
+  (choices) => {
+    if (initializedSelection || !choices.length) return
+    initializedSelection = true
+    const plan = props.plan
+    if (!plan) return
+    if (plan.config?.selectedRequestIDs) {
+      selectedCaseIDs.value = choices
+        .filter((choice) =>
+          plan.config!.selectedRequestIDs!.includes(choice.requestID)
+        )
+        .map(({ entry }) => entry.id)
+      return
+    }
+    const find = (items: HoppCollection[]): HoppCollection | undefined => {
+      for (const item of items) {
+        if ((item.id ?? item._ref_id) === plan.collectionID) return item
+        const nested = find(item.folders)
+        if (nested) return nested
+      }
+    }
+    const group = find(collections.value)
+    const scoped = plan.requestID
+      ? choices.filter((choice) => choice.requestID === plan.requestID)
+      : group
+        ? collectionCaseChoices([group], availableCases.value)
+        : []
+    selectedCaseIDs.value = scoped.map(({ entry }) => entry.id)
+  },
+  { immediate: true }
+)
+const selectedChoices = computed(() =>
+  allChoices.value.filter(({ entry }) =>
+    selectedCaseIDs.value.includes(entry.id)
+  )
+)
+const selectedTarget = computed(() => {
+  const first = selectedChoices.value[0]
+  if (!first) return undefined
+  const requests = new Set(
+    selectedChoices.value.map((choice) => choice.requestID)
+  )
+  return {
+    id: requests.size === 1 ? first.requestID : first.collectionID,
+    collectionID: first.collectionID,
+    kind: requests.size === 1 ? ("request" as const) : ("group" as const),
+  }
+})
 const minutes = ref(rule?.type === "interval" ? rule.minutes : 30)
 const time = ref(rule && rule.type !== "interval" ? rule.time : "09:00")
 const weekday = ref(rule?.type === "weekly" ? rule.weekday : 1)
@@ -471,7 +397,39 @@ const form = ref<HTMLFormElement>()
 const save = async () => {
   const target = selectedTarget.value
   if (saving.value || !target || !form.value?.reportValidity()) return false
-  const parsed = AutomationConfigSchema.safeParse(config.value)
+  try {
+    await storedCases.ready
+  } catch {
+    error.value = t("request_case.load_failed")
+    return false
+  }
+  if (!selectedChoices.value.length) {
+    error.value = t("automation_cases.empty")
+    return false
+  }
+  if (
+    config.value.webhook?.enabled &&
+    !(await notificationPicker.value?.validate())
+  ) {
+    error.value = t("automation_webhook.choose_channels")
+    return false
+  }
+  const parsed = AutomationConfigSchema.safeParse({
+    ...config.value,
+    requestCases: snapshotCases(
+      allChoices.value.filter((choice) =>
+        selectedChoices.value.some(
+          (selected) => selected.requestID === choice.requestID
+        )
+      )
+    ),
+    selectedCaseIDs: selectedCaseIDs.value,
+    selectedRequestIDs: [
+      ...new Set(selectedChoices.value.map((choice) => choice.requestID)),
+    ],
+    casesOnly: true,
+    keepVariableValues: false,
+  })
   if (!parsed.success) {
     error.value = t("workbench_schedule.invalid_config")
     return false

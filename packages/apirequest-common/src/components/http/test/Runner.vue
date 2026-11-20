@@ -247,6 +247,7 @@
   <HttpTestRunnerModal
     v-if="showCollectionsRunnerModal"
     :same-tab="!readonly"
+    :run-name="collectionName"
     :collection-runner-data="
       tab.document.collectionType === 'my-collections'
         ? {

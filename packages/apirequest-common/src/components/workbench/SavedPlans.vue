@@ -73,9 +73,20 @@
           class="mt-1 break-all font-mono text-tiny text-secondaryLight"
         >
           {{
-            JSON.stringify(
-              plan.config ?? { url: plan.url, protocols: plan.protocols }
-            )
+            kind === "automation" && plan.config?.requestCases
+              ? t("automation_cases.summary", {
+                  count: Object.values(plan.config.requestCases)
+                    .flat()
+                    .filter(
+                      (entry) =>
+                        !plan.config?.selectedCaseIDs ||
+                        plan.config.selectedCaseIDs.includes(entry.id)
+                    ).length,
+                  iterations: plan.config.iterations ?? 1,
+                })
+              : JSON.stringify(
+                  plan.config ?? { url: plan.url, protocols: plan.protocols }
+                )
           }}
         </p>
       </div>
@@ -127,6 +138,7 @@
     <HttpTestRunnerModal
       v-if="runner && selected"
       :collection-runner-data="runner"
+      :run-name="selected?.name"
       :prev-config="selected.config"
       :initial-selection="runnerSelection"
       :auto-run="runImmediately"
@@ -306,13 +318,17 @@ const load = async (plan: SavedWorkbenchPlan, immediately = false) => {
         : current
     if (props.kind === "automation") {
       const entry = entries.value.find(({ collection }) =>
-        current.requestID
-          ? collection.requests.some(
-              ({ id, _ref_id }) => (id ?? _ref_id) === current.requestID
+        current.config?.selectedRequestIDs
+          ? collection.requests.some(({ id, _ref_id }) =>
+              current.config!.selectedRequestIDs!.includes(id ?? _ref_id ?? "")
             )
-          : (collection.id ?? collection._ref_id) === current.collectionID
+          : current.requestID
+            ? collection.requests.some(
+                ({ id, _ref_id }) => (id ?? _ref_id) === current.requestID
+              )
+            : (collection.id ?? collection._ref_id) === current.collectionID
       )
-      if (current.requestID) {
+      if (current.requestID && !current.config?.selectedRequestIDs) {
         const index =
           entry?.collection.requests.findIndex(
             ({ id, _ref_id }) => (id ?? _ref_id) === current.requestID

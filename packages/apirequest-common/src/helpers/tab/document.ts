@@ -60,6 +60,11 @@ export type TestRunnerConfig = {
   persistResponses: boolean
   keepVariableValues: boolean
   executeScripts?: boolean
+  requestCases?: import("@apirequest/data").CaseMap
+  selectedCaseIDs?: string[]
+  selectedRequestIDs?: string[]
+  casesOnly?: boolean
+  webhook?: import("@apirequest/data").AutomationConfig["webhook"]
   dataset?: TestRunnerDataset
 }
 

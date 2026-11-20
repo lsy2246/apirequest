@@ -50,6 +50,8 @@ export type ProcessRequestParams = {
   envs: HoppEnvs;
   path: string;
   delay: number;
+  haltOnPreRequestError?: boolean;
+  signal?: AbortSignal;
 
   collectionVariables?: HoppCollectionVariable[];
   inheritedPreRequestScripts?: string[];

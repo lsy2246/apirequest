@@ -9,13 +9,17 @@ const mocks = vi.hoisted(() => ({
   refresh: undefined as undefined | (() => Promise<void>),
   download: vi.fn(),
   remove: vi.fn(),
+  localReports: [] as any[],
 }))
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: mocks.navigate }) }))
 vi.mock("~/composables/i18n", () => ({ useI18n: () => (key: string) => key }))
 vi.mock("~/composables/workbenchReports", async () => {
   const { ref } = await import("vue")
   return {
-    useWorkbenchReports: () => ({ reports: ref([]), remove: mocks.remove }),
+    useWorkbenchReports: () => ({
+      reports: ref(mocks.localReports),
+      remove: mocks.remove,
+    }),
     downloadWorkbenchReport: mocks.download,
   }
 })
@@ -90,6 +94,7 @@ function mount(component: any, props = {}) {
 afterEach(() => {
   app?.unmount()
   mocks.refresh = undefined
+  mocks.localReports = []
   vi.clearAllMocks()
 })
 const report = {
@@ -112,6 +117,34 @@ const report = {
 }
 
 describe("automation reports and live progress", () => {
+  it("merges backend notification state into a manual report without duplicating it or losing local details", async () => {
+    const local = {
+      ...report,
+      trigger: undefined,
+      steps: [
+        ...report.steps,
+        { name: "Local details", passed: true, errors: [] },
+      ],
+    }
+    mocks.localReports = [local]
+    mocks.api.mockResolvedValue([
+      {
+        ...report,
+        trigger: undefined,
+        backendStored: true,
+        notification: { status: "sent", attempts: 1 },
+      },
+    ])
+    const target = mount(Reports, { kind: "automation" })
+    await mocks.refresh?.()
+    await nextTick()
+    expect(target.querySelectorAll(".report-open")).toHaveLength(1)
+    expect(target.textContent).toContain("automation_webhook.sent")
+    target.querySelector<HTMLButtonElement>(".report-export")!.click()
+    expect(mocks.download).toHaveBeenCalledWith(
+      expect.objectContaining({ steps: local.steps, backendStored: true })
+    )
+  })
   it("opens automation history in its result page and keeps JSON export separate", async () => {
     mocks.api.mockResolvedValue([report])
     const target = mount(Reports, { kind: "automation" })

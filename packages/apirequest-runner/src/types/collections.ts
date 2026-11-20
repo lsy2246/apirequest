@@ -2,6 +2,12 @@ import { HoppCollection } from "@apirequest/data";
 import { HoppEnvPair, HoppEnvs, RequestReport } from "./request";
 
 export type CollectionRunnerParam = {
+  requestCases?: import("@apirequest/data").CaseMap;
+  selectedCaseIDs?: string[];
+  selectedRequestIDs?: string[];
+  casesOnly?: boolean;
+  caseEnvironments?: Record<string, HoppEnvs["selected"]>;
+  executeCaseScripts?: boolean;
   collections: HoppCollection[];
   envs: HoppEnvs;
   delay?: number;

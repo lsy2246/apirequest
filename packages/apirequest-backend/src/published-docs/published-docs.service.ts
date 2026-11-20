@@ -11,7 +11,7 @@ import { PublishedDocs, PublishedDocsVersion } from './published-docs.model';
 import { OffsetPaginationArgs } from 'src/types/input-types.args';
 import { stringToJson } from 'src/utils';
 import { UserCollectionService } from 'src/user-collection/user-collection.service';
-import { ConfigService } from '@nestjs/config';
+import { SiteSettingsService } from 'src/site-settings/site-settings.service';
 import { PrismaError } from 'src/prisma/prisma-error-codes';
 import { CollectionFolder } from 'src/types/CollectionFolder';
 import { plainToInstance } from 'class-transformer';
@@ -21,7 +21,7 @@ export class PublishedDocsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly userCollectionService: UserCollectionService,
-    private readonly configService: ConfigService,
+    private readonly site: SiteSettingsService,
   ) {}
   /**
    * Get or generate slug for a collection
@@ -67,7 +67,7 @@ export class PublishedDocsService {
       environmentVariables: doc.environmentVariables
         ? JSON.stringify(doc.environmentVariables)
         : null,
-      url: `${this.configService.get('VITE_BASE_URL')}/view/${doc.slug}/${doc.version}`,
+      url: this.site.url(`view/${encodeURIComponent(doc.slug)}/${encodeURIComponent(doc.version)}`),
     };
   }
   /**

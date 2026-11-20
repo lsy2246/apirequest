@@ -221,7 +221,7 @@ export type EnvMethods = {
     get: (key: string, options?: EnvAPIOptions) => string | null | undefined
     getResolve: (
       key: string,
-      options?: EnvAPIOptions,
+      options?: EnvAPIOptions
     ) => string | null | undefined
     set: (key: string, value: string, options?: EnvAPIOptions) => void
     unset: (key: string, options?: EnvAPIOptions) => void
@@ -345,7 +345,10 @@ export type FetchCallMeta = {
  * @param init - Standard Fetch API options (method, headers, body, etc.)
  * @returns Promise<Response> - Standard Fetch API Response object
  */
-export type HoppFetchHook = (
+export type HoppFetchHook = ((
   input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response>
+  init?: RequestInit
+) => Promise<Response>) & {
+  executionSignal?: AbortSignal
+  executionDeadline?: number
+}

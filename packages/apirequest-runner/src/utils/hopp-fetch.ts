@@ -2,6 +2,7 @@ import axios, { Method } from "axios";
 import type { HoppFetchHook } from "@apirequest/js-sandbox";
 import { wrapper as axiosCookieJarSupport } from "axios-cookiejar-support";
 import { CookieJar } from "tough-cookie";
+import { caseDeadline } from "@apirequest/data";
 
 /**
  * Creates a hopp.fetch() hook implementation for CLI.
@@ -9,12 +10,13 @@ import { CookieJar } from "tough-cookie";
  *
  * @returns HoppFetchHook implementation
  */
-export const createHoppFetchHook = (): HoppFetchHook => {
+export const createHoppFetchHook = (signal?: AbortSignal): HoppFetchHook => {
   // Cookie jar maintains cookies across redirects (matches Postman behavior)
   const jar = new CookieJar();
   const axiosWithCookies = axiosCookieJarSupport(axios.create());
 
-  return async (input, init) => {
+  const hook: HoppFetchHook = async (input, init) => {
+    signal?.throwIfAborted();
     // Extract URL from different input types
     const urlStr =
       typeof input === "string"
@@ -71,9 +73,10 @@ export const createHoppFetchHook = (): HoppFetchHook => {
     };
 
     // Handle AbortController signal if provided
-    if (init?.signal) {
-      config.signal = init.signal;
-    }
+    config.signal =
+      signal && init?.signal
+        ? AbortSignal.any([signal, init.signal])
+        : (signal ?? init?.signal);
 
     try {
       const axiosResponse = await axiosWithCookies(config);
@@ -104,6 +107,9 @@ export const createHoppFetchHook = (): HoppFetchHook => {
       );
     }
   };
+  hook.executionSignal = signal;
+  hook.executionDeadline = caseDeadline(signal);
+  return hook;
 };
 
 /**

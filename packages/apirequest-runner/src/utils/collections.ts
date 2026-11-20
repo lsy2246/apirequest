@@ -2,12 +2,17 @@ import {
   HoppCollection,
   HoppRESTRequest,
   isGQLRequest,
+  buildCaseRequest,
+  evaluateAssertions,
+  DEFAULT_CASE_TIMEOUT_MS,
+  CaseTimeoutError,
+  runWithCaseDeadline,
 } from "@apirequest/data";
 import chalk from "chalk";
 import { log } from "console";
 import * as A from "fp-ts/Array";
 import { pipe } from "fp-ts/function";
-import { round } from "lodash-es";
+import { round, cloneDeep } from "lodash-es";
 
 import { CollectionRunnerParam } from "../types/collections";
 import {
@@ -40,6 +45,7 @@ import {
 } from "./request";
 import { getTestMetrics } from "./test";
 import { filterValidScripts } from "@apirequest/js-sandbox/scripting";
+import { reportError } from "./report";
 
 const { WARN, FAIL, INFO } = exceptionColors;
 
@@ -125,7 +131,8 @@ export const collectionsRunner = async (
             return true;
           }
           return false;
-        }
+        },
+        param
       );
       for (const report of requestsReport.slice(firstResult))
         report.iteration = count + 1;
@@ -153,7 +160,8 @@ const processCollection = async (
     iteration: number;
   }) => Promise<void>,
   iteration = 1,
-  skipRequest?: () => boolean
+  skipRequest?: () => boolean,
+  caseOptions?: CollectionRunnerParam
 ) => {
   // Accumulate scripts from root -> current collection for inheritance
   // filterValidScripts strips empty, whitespace-only, and module-prefix-only scripts
@@ -169,46 +177,193 @@ const processCollection = async (
   const runRequests = async () => {
     // GraphQL requests become REST-shaped stubs so the shared pipeline runs
     // them unchanged; unrunnable stubs fail at effective-request time
-    for (const request of collection.requests) {
-      if (skipRequest?.()) continue;
-      await beforeRequest?.({ name: request.name, iteration });
-      const _request = isGQLRequest(request)
-        ? preProcessGQLRequest(request, collection)
-        : preProcessRequest(request as HoppRESTRequest, collection);
-      const requestPath = `${path}/${_request.name}`;
+    for (const base of collection.requests) {
+      if (
+        caseOptions?.selectedRequestIDs &&
+        !caseOptions.selectedRequestIDs.includes(base.id ?? base._ref_id ?? "")
+      )
+        continue;
+      const saved = isGQLRequest(base)
+        ? []
+        : (base.id && caseOptions?.requestCases?.[base.id]) ||
+          (base._ref_id && caseOptions?.requestCases?.[base._ref_id]) ||
+          [];
+      const cases = saved.length
+        ? saved.filter(
+            (entry) =>
+              !caseOptions?.selectedCaseIDs ||
+              caseOptions.selectedCaseIDs.includes(entry.id)
+          )
+        : caseOptions?.casesOnly
+          ? []
+          : [undefined];
+      for (const testCase of cases) {
+        if (skipRequest?.()) continue;
+        const name = testCase ? `${base.name} · ${testCase.name}` : base.name;
+        await beforeRequest?.({ name, iteration });
+        if (testCase && delay > 0)
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        const caseStarted = Date.now();
+        const timeoutMs = testCase?.timeoutMs ?? DEFAULT_CASE_TIMEOUT_MS;
+        let requestReport: RequestReport;
+        try {
+          const definition =
+            testCase && caseOptions?.executeCaseScripts === false
+              ? { ...testCase, scripts: "disabled" as const }
+              : testCase;
+          const request = definition
+            ? buildCaseRequest(base as HoppRESTRequest, definition, {
+                headers: collection.headers.map((inheritedHeader) => ({
+                  inheritedHeader,
+                })),
+                auth: { inheritedAuth: collection.auth },
+              })
+            : cloneDeep(base);
+          request.name = name;
+          const _request = isGQLRequest(request)
+            ? preProcessGQLRequest(request, collection)
+            : preProcessRequest(
+                request as HoppRESTRequest,
+                definition ? { ...collection, headers: [] } : collection
+              );
+          const requestPath = `${path}/${_request.name}`;
 
-      const collectionVariables = collection.variables.filter(
-        (variable) => variable.key && variable.key.trim() !== ""
-      );
+          const collectionVariables = collection.variables.filter(
+            (variable) => variable.key && variable.key.trim() !== ""
+          );
 
-      const processRequestParams: ProcessRequestParams = {
-        path: requestPath,
-        request: _request,
-        envs,
-        delay,
+          const caseEnv = definition ? cloneDeep(envs) : envs;
+          if (definition?.environmentID !== undefined) {
+            if (definition.environmentID === null) caseEnv.selected = [];
+            else {
+              const values =
+                caseOptions?.caseEnvironments?.[definition.environmentID];
+              if (!values) throw new Error("case_environment_missing");
+              caseEnv.selected = cloneDeep(values);
+            }
+          }
+          if (definition) {
+            caseEnv.selected = [
+              ...Object.entries(definition.variables).map(([key, value]) => ({
+                key,
+                initialValue: value,
+                currentValue: value,
+                secret: false as const,
+              })),
+              ...caseEnv.selected.filter(
+                ({ key }) => !Object.hasOwn(definition.variables, key)
+              ),
+            ];
+          }
+          const processRequestParams: ProcessRequestParams = {
+            path: requestPath,
+            request: _request,
+            envs: caseEnv,
+            delay: definition ? 0 : delay,
 
-        collectionVariables,
-        inheritedPreRequestScripts,
-        inheritedTestScripts,
-      };
+            collectionVariables: definition
+              ? [
+                  ...Object.entries(definition.variables).map(
+                    ([key, value]) => ({
+                      key,
+                      initialValue: value,
+                      currentValue: value,
+                      secret: false as const,
+                    })
+                  ),
+                  ...collectionVariables.filter(
+                    ({ key }) => !Object.hasOwn(definition.variables, key)
+                  ),
+                ]
+              : collectionVariables,
+            haltOnPreRequestError: !!definition,
+            inheritedPreRequestScripts:
+              definition && definition.scripts !== "inherit"
+                ? []
+                : inheritedPreRequestScripts,
+            inheritedTestScripts:
+              definition && definition.scripts !== "inherit"
+                ? []
+                : inheritedTestScripts,
+          };
 
-      // Request processing initiated message.
-      log(WARN(`\nRunning: ${chalk.bold(requestPath)}`));
+          // Request processing initiated message.
+          log(WARN(`\nRunning: ${chalk.bold(requestPath)}`));
 
-      // Processing current request.
-      const result = await processRequest(processRequestParams)();
+          // Processing current request.
+          const result = definition
+            ? await runWithCaseDeadline(timeoutMs, (signal) =>
+                processRequest({ ...processRequestParams, signal })()
+              )
+            : await processRequest(processRequestParams)();
 
-      // Updating global & selected envs with new envs from processed-request output.
-      const { global, selected } = result.envs;
-      envs.global = global;
-      envs.selected = selected;
+          // Updating global & selected envs with new envs from processed-request output.
+          const { global, selected } = result.envs;
+          if (!definition) {
+            envs.global = global;
+            envs.selected = selected;
+          }
 
-      // Storing current request's report.
-      const requestReport = result.report;
-      requestReport.iteration = iteration;
-      requestsReport.push(requestReport);
-      await onRequestComplete?.(requestReport);
-      if (stopOnError && !requestReport.result) return false;
+          // Storing current request's report.
+          requestReport = result.report;
+          if (definition) {
+            const response = requestReport.response;
+            const assertions = evaluateAssertions(definition.assertions, {
+              status: response?.statusCode ?? 0,
+              headers: Object.fromEntries(
+                (response?.headers ?? []).map(({ key, value }) => [key, value])
+              ),
+              body: response?.body ?? "",
+              duration: requestReport.requestElapsedMs ?? 0,
+            });
+            requestReport.tests.push(
+              ...assertions.map((item) => ({
+                descriptor:
+                  `${item.assertion.target} ${item.assertion.path} ${item.assertion.operator}`.trim(),
+                passed: item.passed ? 1 : 0,
+                failed: item.passed ? 0 : 1,
+                expectResults: [
+                  {
+                    status: item.passed ? ("pass" as const) : ("fail" as const),
+                    message: `expected: ${JSON.stringify(item.expected)}, actual: ${JSON.stringify(item.actual)}${item.error ? ` (${item.error})` : ""}`,
+                  },
+                ],
+              }))
+            );
+            requestReport.result =
+              requestReport.result && assertions.every((item) => item.passed);
+            if (Date.now() - caseStarted >= timeoutMs)
+              throw new CaseTimeoutError(timeoutMs, Date.now() - caseStarted);
+          }
+        } catch (cause) {
+          if (!testCase) throw cause;
+          requestReport = {
+            path: `${path}/${name}`,
+            requestName: name,
+            method: "method" in base ? base.method : "POST",
+            endpoint: "endpoint" in base ? base.endpoint : base.url,
+            iteration,
+            result: false,
+            tests: [],
+            errors: [
+              {
+                code:
+                  cause instanceof CaseTimeoutError
+                    ? "CASE_TIMEOUT"
+                    : "REQUEST_ERROR",
+                data: reportError(cause),
+              },
+            ],
+            duration: { test: 0, request: 0, preRequest: 0 },
+            requestElapsedMs:
+              cause instanceof CaseTimeoutError ? cause.elapsedMs : undefined,
+          };
+        }
+        requestReport.iteration = iteration;
+        requestsReport.push(requestReport);
+        await onRequestComplete?.(requestReport);
+        if (stopOnError && !requestReport.result) return false;
+      }
     }
     return true;
   };
@@ -266,7 +421,8 @@ const processCollection = async (
       onRequestComplete,
       beforeRequest,
       iteration,
-      skipRequest
+      skipRequest,
+      caseOptions
     );
     if (!completed) return false;
   }

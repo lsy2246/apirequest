@@ -11,6 +11,7 @@ import {
   HoppCollection,
   GlobalEnvironment,
   CollectionVariable,
+  CaseMapSchema,
 } from "@apirequest/data"
 import { entityReference } from "verzod"
 import { z } from "zod"
@@ -593,6 +594,17 @@ export const WORKSPACE_TABS_STATE_SCHEMA = z
               iterations: z.number(),
               keepVariableValues: z.boolean(),
               executeScripts: z.boolean().optional(),
+              requestCases: CaseMapSchema.optional(),
+              selectedCaseIDs: z.array(z.string()).optional(),
+              selectedRequestIDs: z.array(z.string()).optional(),
+              casesOnly: z.boolean().optional(),
+              webhook: z
+                .object({
+                  enabled: z.boolean(),
+                  includeErrorDetails: z.boolean(),
+                  channelIDs: z.array(z.string()).optional(),
+                })
+                .optional(),
               persistResponses: z.boolean(),
               stopOnError: z.boolean(),
               dataset: z.optional(TestRunnerDatasetSchema),

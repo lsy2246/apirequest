@@ -195,7 +195,10 @@
             <h4 class="font-semibold text-secondaryDark">
               {{ t("collection_runner.run_sequence") }}
             </h4>
-            <div v-if="collectionTree" class="flex items-center gap-2">
+            <div
+              v-if="collectionTree && !caseChoices.length"
+              class="flex items-center gap-2"
+            >
               <span class="text-xs text-secondaryLight">
                 {{
                   t("collection_runner.selected_requests_count", {
@@ -242,12 +245,21 @@
             />
           </div>
           <template v-else-if="collectionTree">
+            <AutomationCaseSelector
+              v-if="caseChoices.length"
+              v-model="config.selectedCaseIDs"
+              :collections="[collectionTree]"
+              :cases="config.requestCases ?? {}"
+              class="mt-4"
+            />
             <HoppSmartInput
+              v-if="!caseChoices.length"
               v-model="requestFilter"
               class="mt-4 flex-shrink-0"
               :placeholder="t('collection_runner.filter_requests')"
             />
             <div
+              v-if="!caseChoices.length"
               class="flex-1 min-h-0 mt-2 max-h-64 lg:max-h-none overflow-auto rounded border border-divider bg-primaryLight px-3 py-2"
             >
               <HttpTestRunnerRequestSelector
@@ -386,11 +398,18 @@
 
 <script setup lang="ts">
 import WorkbenchToggle from "~/components/workbench/Toggle.vue"
+import AutomationCaseSelector from "~/components/workbench/AutomationCaseSelector.vue"
+import { useWorkbenchRequestCases } from "~/composables/workbenchRequestCases"
+import {
+  collectionCaseChoices,
+  snapshotCases,
+  selectAutomationRequests,
+} from "~/helpers/request-cases/automation"
 import { useRouter } from "vue-router"
 import { computed, onMounted, ref } from "vue"
 import { useI18n } from "~/composables/i18n"
 
-import { HoppCollection } from "@apirequest/data"
+import { HoppCollection, makeCollection } from "@apirequest/data"
 import { useService } from "dioc/vue"
 import { useToast } from "~/composables/toast"
 import { TestRunnerConfig } from "~/helpers/tab/document"
@@ -430,6 +449,7 @@ export type CollectionRunnerData =
 
 const props = defineProps<{
   sameTab?: boolean
+  runName?: string
   collectionRunnerData: CollectionRunnerData
   prevConfig?: Partial<TestRunnerConfig>
   /**
@@ -503,6 +523,14 @@ const config = ref<TestRunnerConfig>({
   keepVariableValues: true,
   executeScripts: true,
 })
+const caseChoices = computed(() =>
+  collectionTree.value
+    ? collectionCaseChoices(
+        [collectionTree.value],
+        config.value.requestCases ?? {}
+      )
+    : []
+)
 // Cap the data-preview so a large dataset doesn't stringify thousands of rows
 // into the DOM on every render. Computed once, and only while the preview is open.
 const DATASET_PREVIEW_ROW_CAP = 50
@@ -548,6 +576,17 @@ const loadCollectionTree = async () => {
   }
 
   collectionTree.value = tree as HoppCollection
+  try {
+    const stored = useWorkbenchRequestCases()
+    await stored.ready
+    config.value.requestCases ??= snapshotCases(
+      collectionCaseChoices([collectionTree.value], stored.cases.value)
+    )
+  } catch {
+    collectionLoadFailed.value = true
+    collectionTree.value = null
+    return
+  }
 
   const available = collectRequestIDs(collectionTree.value)
 
@@ -562,6 +601,17 @@ const loadCollectionTree = async () => {
   // 单接口计划显式传入执行范围；请求在加载前被删除时，保持空选区。
   if (carriedOver.length > 0 || props.initialSelection) {
     selectedRequestIDs.value = new Set(carriedOver)
+    if (
+      !config.value.selectedRequestIDs &&
+      !config.value.selectedCaseIDs &&
+      caseChoices.value.length
+    ) {
+      config.value.selectedCaseIDs = collectionCaseChoices(
+        [collectionTree.value],
+        config.value.requestCases ?? {},
+        new Set(carriedOver)
+      ).map(({ entry }) => entry.id)
+    }
 
     // Only install an explicit order when the previous run actually had one:
     // a selection in natural order is just "which requests", and treating it
@@ -695,11 +745,27 @@ const runTests = async () => {
     toast.error(t("collection_runner.no_requests_selected"))
     return
   }
+  if (caseChoices.value.length && config.value.selectedCaseIDs?.length === 0) {
+    toast.error(t("automation_cases.empty"))
+    return
+  }
+  if (caseChoices.value.length) {
+    const chosen = caseChoices.value.filter(
+      ({ entry }) =>
+        !config.value.selectedCaseIDs ||
+        config.value.selectedCaseIDs.includes(entry.id)
+    )
+    config.value.casesOnly = true
+    config.value.selectedRequestIDs = [
+      ...new Set(chosen.map((choice) => choice.requestID)),
+    ]
+  }
 
   // `undefined` means "everything, in collection order"; otherwise send the
   // explicit run order, which the runner executes in exactly this order.
   const selectedRequestRefIds =
-    allSelected.value && requestOrder.value.length === 0
+    config.value.selectedRequestIDs ||
+    (allSelected.value && requestOrder.value.length === 0)
       ? undefined
       : orderedRequestIDs.value.filter((id) => selectedRequestIDs.value.has(id))
 
@@ -708,7 +774,9 @@ const runTests = async () => {
   const runTab = tabs.createNewTab({
     type: "test-runner",
     collectionType: props.collectionRunnerData.type,
-    collectionID: props.collectionRunnerData.collectionID,
+    collectionID: config.value.selectedRequestIDs
+      ? tree._ref_id!
+      : props.collectionRunnerData.collectionID,
     collection: tree,
     isDirty: false,
     config: {
@@ -749,8 +817,33 @@ const getCollectionTree = async (
   _type: CollectionRunnerData["type"],
   collectionID: string
 ) => {
-  const collection = collectionID ? getRESTCollectionByRefId(collectionID) : undefined
-  return collection ? (await import("~/helpers/remote-collections")).ensureRemoteCollection(collection) : undefined
+  if (config.value.selectedRequestIDs) {
+    const { ensureAllRemoteCollections } =
+      await import("~/helpers/remote-collections")
+    const roots = selectAutomationRequests(
+      await ensureAllRemoteCollections(),
+      config.value.selectedRequestIDs
+    )
+    return makeCollection({
+      name: props.runName ?? t("automation_cases.title"),
+      _ref_id: "automation-selection",
+      folders: roots,
+      requests: [],
+      headers: [],
+      variables: [],
+      auth: { authType: "none", authActive: false },
+      preRequestScript: "",
+      testScript: "",
+    })
+  }
+  const collection = collectionID
+    ? getRESTCollectionByRefId(collectionID)
+    : undefined
+  return collection
+    ? (await import("~/helpers/remote-collections")).ensureRemoteCollection(
+        collection
+      )
+    : undefined
 }
 
 function checkIfCollectionIsEmpty(collection: HoppCollection): boolean {

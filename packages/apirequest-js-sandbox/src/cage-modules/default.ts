@@ -6,6 +6,7 @@ import {
   esmModuleLoader,
   timers,
   urlPolyfill,
+  defineCageModule,
 } from "faraday-cage/modules"
 import type { HoppFetchHook } from "~/types"
 import { customCryptoModule } from "./crypto"
@@ -18,6 +19,17 @@ type DefaultModulesConfig = {
 
 export const defaultModules = (config?: DefaultModulesConfig) => {
   return [
+    defineCageModule((ctx) => {
+      const fetch = config?.hoppFetchHook
+      if (fetch?.executionDeadline !== undefined || fetch?.executionSignal) {
+        ctx.runtime.setInterruptHandler(
+          () =>
+            !!fetch.executionSignal?.aborted ||
+            (fetch.executionDeadline !== undefined &&
+              Date.now() >= fetch.executionDeadline)
+        )
+      }
+    }),
     urlPolyfill,
     blobPolyfill,
     ConsoleModule({

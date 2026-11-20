@@ -30,7 +30,7 @@ const mockConfigService = mockDeep<ConfigService>();
 const publishedDocsService = new PublishedDocsService(
   mockPrisma,
   mockUserCollectionService,
-  mockConfigService,
+  { url: (path: string) => `${mockConfigService.get("VITE_BASE_URL")}/${path}` } as any,
 );
 
 const currentTime = new Date();

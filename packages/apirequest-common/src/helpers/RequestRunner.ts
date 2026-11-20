@@ -343,7 +343,8 @@ export const delegatePreRequestScriptRunner = (
     temp: Environment["variables"]
   },
   cookies: Cookie[] | null,
-  inheritedPreRequestScripts: string[] = []
+  inheritedPreRequestScripts: string[] = [],
+  signal?: AbortSignal
 ): Promise<E.Either<string, SandboxPreRequestResult>> => {
   const { preRequestScript } = request
   // Pre-request order: root → request.
@@ -360,7 +361,11 @@ export const delegatePreRequestScriptRunner = (
       })
     )
   }
-  const hoppFetchHook = createHoppFetchHook(kernelInterceptorService)
+  const hoppFetchHook = createHoppFetchHook(
+    kernelInterceptorService,
+    undefined,
+    signal
+  )
   return runPreRequestScript(combinedScript, {
     envs,
     request,
@@ -373,7 +378,8 @@ export const runPostRequestScript = (
   request: HoppRESTRequest,
   response: HoppRESTResponse,
   cookies: Cookie[] | null,
-  inheritedTestScripts: string[] = []
+  inheritedTestScripts: string[] = [],
+  signal?: AbortSignal
 ): Promise<E.Either<string, SandboxTestResult>> => {
   const { testScript } = request
   // Test order: request → root (reverse of pre-request).
@@ -392,7 +398,11 @@ export const runPostRequestScript = (
       } satisfies SandboxTestResult)
     )
   }
-  const hoppFetchHook = createHoppFetchHook(kernelInterceptorService)
+  const hoppFetchHook = createHoppFetchHook(
+    kernelInterceptorService,
+    undefined,
+    signal
+  )
   return runTestScript(combinedScript, {
     envs,
     request,

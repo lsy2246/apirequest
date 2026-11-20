@@ -1,10 +1,34 @@
 /* eslint-disable vue/one-component-per-file -- Multiple component stubs mount the real editor. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createApp, defineComponent, h, nextTick, type App } from "vue"
-import { getAutomationConfig } from "@apirequest/data"
+import { newRequestCase } from "@apirequest/data"
 import AutomationSchedule from "../AutomationSchedule.vue"
 
-const mocks = vi.hoisted(() => ({ api: vi.fn(), scheduling: true }))
+const mocks = vi.hoisted(() => ({
+  api: vi.fn(),
+  scheduling: true,
+  caseData: {} as Record<string, unknown[]>,
+}))
+vi.mock("../NotificationChannelPicker.vue", async () => {
+  const { defineComponent, h } = await import("vue")
+  return {
+    default: defineComponent({
+      setup: (_, { expose }) => {
+        expose({ validate: async () => true })
+        return () => h("div")
+      },
+    }),
+  }
+})
+vi.mock("~/composables/workbenchRequestCases", async () => {
+  const { ref } = await import("vue")
+  return {
+    useWorkbenchRequestCases: () => ({
+      cases: ref(mocks.caseData),
+      ready: Promise.resolve(),
+    }),
+  }
+})
 vi.mock("~/helpers/workbench-mcp", () => ({
   workbenchMcpAPI: mocks.api,
   workbenchSchedulesAvailable: () => mocks.scheduling,
@@ -29,10 +53,17 @@ vi.mock("~/composables/workbenchCollections", async () => {
           ],
         },
         {
+          id: "other-group",
           _ref_id: "local-group",
-          name: "Local group",
+          name: "Other group",
           requests: [
-            { _ref_id: "local-request", name: "Local request", method: "GET" },
+            {
+              id: "other",
+              _ref_id: "local-request",
+              name: "Other request",
+              method: "GET",
+            },
+            { id: "empty", name: "No cases", method: "GET" },
           ],
           folders: [],
         },
@@ -95,6 +126,15 @@ function mount(props = {}) {
   const target = document.createElement("div")
   const app = createApp(AutomationSchedule, props)
   app.component(
+    "RouterLink",
+    defineComponent({
+      setup:
+        (_, { slots }) =>
+        () =>
+          h("a", slots.default?.()),
+    })
+  )
+  app.component(
     "HoppSmartModal",
     defineComponent({
       props: { title: { type: String, default: "" } },
@@ -142,6 +182,13 @@ async function choose(target: HTMLElement, label: string, value: string) {
   await nextTick()
 }
 beforeEach(() => {
+  mocks.caseData = {
+    request: [
+      { ...newRequestCase(), id: "case-first", name: "First case" },
+      { ...newRequestCase(), id: "case-second", name: "Second case" },
+    ],
+    other: [{ ...newRequestCase(), id: "case-other", name: "Other case" }],
+  }
   mocks.scheduling = true
   mocks.api.mockResolvedValue({})
 })
@@ -150,190 +197,214 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe("shared automation plan editor", () => {
-  it("offers the same execution fields, toggles and rule choices for create and edit", () => {
-    const created = mount(),
-      edited = mount({ plan })
-    const fields = (target: HTMLElement) => [
-      ...Array.from(target.querySelectorAll("input"), (input) => input.name),
-      ...Array.from(target.querySelectorAll('[role="switch"]'), (toggle) =>
-        toggle.textContent?.trim()
-      ),
-      ...Array.from(
-        target.querySelectorAll(
-          'select[aria-label="workbench_schedule.rule"] option'
-        ),
-        (option) => (option as HTMLOptionElement).value
-      ),
-    ]
-    expect(fields(created)).toEqual(fields(edited))
-    expect(
-      created.querySelector<HTMLInputElement>('[name="delay"]')!.value
-    ).toBe("0")
-    expect(
-      edited.querySelector<HTMLInputElement>('[name="delay"]')!.value
-    ).toBe("250")
-    expect(
-      edited.querySelector('[aria-pressed="true"]')?.textContent
-    ).toContain("Request")
-  })
+async function tickCheckbox(target: HTMLElement, label: string) {
+  const input = target.querySelector<HTMLInputElement>(
+    `input[aria-label="${label}"]`
+  )!
+  expect(input).toBeTruthy()
+  input.checked = !input.checked
+  input.dispatchEvent(new Event("change", { bubbles: true }))
+  await nextTick()
+}
+async function expandAll(target: HTMLElement) {
+  Array.from(target.querySelectorAll("button"))
+    .find((button) => button.textContent === "automation_cases.expand_all")!
+    .click()
+  await nextTick()
+}
 
-  it("creates a manual plan with explicit defaults and persists it without running", async () => {
-    const saved = vi.fn(),
-      target = mount({ onSaved: saved })
-    target.querySelector<HTMLButtonElement>('[aria-pressed="false"]')!.click()
-    await nextTick()
-    await submit(target)
-    expect(mocks.api).toHaveBeenCalledExactlyOnceWith("automation/schedules", {
-      collectionID: "group",
-      environmentID: null,
-      rule: null,
-      draftRule: { type: "interval", minutes: 30 },
-      overrides: undefined,
-      config: getAutomationConfig(),
-    })
-    expect(saved).toHaveBeenCalledOnce()
-  })
-
-  it("preserves legacy defaults on an unchanged save and allows switching a request to a group", async () => {
+describe("hierarchical automation plan editor", () => {
+  it("keeps Webhook summary and error-detail preferences independently when saving", async () => {
     const target = mount({ plan })
-    await submit(target)
-    expect(mocks.api.mock.calls[0][1].config).toEqual(
-      getAutomationConfig(plan.config)
-    )
-    expect(mocks.api.mock.calls[0][1].requestID).toBe("request")
-    target.querySelector<HTMLButtonElement>('[aria-pressed="false"]')!.click()
+    const toggle = (label: string) =>
+      Array.from(
+        target.querySelectorAll<HTMLButtonElement>('[role="switch"]')
+      ).find((item) => item.textContent?.trim() === label)!
+    expect(toggle("automation_webhook.include_details")).toBeUndefined()
+    toggle("automation_webhook.enable").click()
+    await nextTick()
+    expect(
+      toggle("automation_webhook.include_details").getAttribute("aria-checked")
+    ).toBe("false")
+    toggle("automation_webhook.include_details").click()
     await nextTick()
     await submit(target)
-    expect(mocks.api.mock.calls[1][1]).toMatchObject({ collectionID: "group" })
-    expect(mocks.api.mock.calls[1][1]).not.toHaveProperty("requestID")
+    expect(mocks.api.mock.calls[0][1].config.webhook).toEqual({
+      enabled: true,
+      includeErrorDetails: true,
+    })
+    toggle("automation_webhook.enable").click()
+    await nextTick()
+    await submit(target)
+    expect(mocks.api.mock.calls[1][1].config.webhook).toEqual({
+      enabled: false,
+      includeErrorDetails: true,
+    })
+  })
+  it("selects cases across folders, saves the source requests and never adds requests without cases", async () => {
+    const target = mount()
+    await tickCheckbox(target, "Group")
+    await tickCheckbox(target, "Other group")
+    await submit(target)
+    expect(mocks.api).toHaveBeenCalledOnce()
+    expect(mocks.api.mock.calls[0][1]).toMatchObject({
+      collectionID: "nested",
+      config: {
+        casesOnly: true,
+        selectedRequestIDs: ["request", "other"],
+        selectedCaseIDs: ["case-first", "case-second", "case-other"],
+        requestCases: mocks.caseData,
+      },
+      rule: null,
+    })
   })
 
-  it("persists all execution switches from the shared form", async () => {
+  it("shows partial selection on every ancestor and disables requests without cases", async () => {
+    const target = mount({ plan })
+    await expandAll(target)
+    await tickCheckbox(target, "First case")
+    expect(
+      target.querySelector<HTMLInputElement>('input[aria-label="Group"]')!
+        .indeterminate
+    ).toBe(true)
+    expect(
+      target.querySelector<HTMLInputElement>('input[aria-label="Nested"]')!
+        .indeterminate
+    ).toBe(true)
+    expect(
+      target.querySelector<HTMLInputElement>('input[aria-label="Request"]')!
+        .indeterminate
+    ).toBe(true)
+    expect(
+      target.querySelector<HTMLInputElement>('input[aria-label="No cases"]')!
+        .disabled
+    ).toBe(true)
+    await submit(target)
+    expect(mocks.api.mock.calls[0][1].config.selectedCaseIDs).toEqual([
+      "case-second",
+    ])
+  })
+
+  it("searches case names with ancestors and can display only selected cases", async () => {
+    const target = mount({ plan })
+    const search = target.querySelector<HTMLInputElement>(
+      'input[type="search"]'
+    )!
+    search.value = "Other case"
+    search.dispatchEvent(new Event("input"))
+    await nextTick()
+    const tree = target.querySelector('[data-testid="case-tree"]')!
+    expect(tree.textContent).toContain("Other group")
+    expect(tree.textContent).toContain("Other request")
+    expect(tree.textContent).toContain("Other case")
+    expect(tree.textContent).not.toContain("First case")
+    search.value = ""
+    search.dispatchEvent(new Event("input"))
+    await nextTick()
+    const selectedOnly = target.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]'
+    )!
+    selectedOnly.checked = true
+    selectedOnly.dispatchEvent(new Event("change"))
+    await nextTick()
+    expect(tree.textContent).toContain("First case")
+    expect(tree.textContent).not.toContain("Other group")
+  })
+
+  it("does not save an empty selection", async () => {
+    const target = mount()
+    await submit(target)
+    expect(mocks.api).not.toHaveBeenCalled()
+    expect(target.textContent).toContain("automation_cases.empty")
+  })
+
+  it("drops legacy plan timeouts and hides controls that do not apply to isolated cases", async () => {
+    const target = mount({
+      plan: {
+        ...plan,
+        config: {
+          ...plan.config,
+          caseTimeoutMs: 45000,
+          keepVariableValues: true,
+        },
+      },
+    })
+    expect(target.querySelector('input[name="caseTimeoutMs"]')).toBeNull()
+    expect(target.textContent).not.toContain("automation_cases.default_timeout")
+    expect(target.textContent).not.toContain(
+      "workbench_schedule.keep_variable_values"
+    )
+    await submit(target)
+    const saved = mocks.api.mock.calls[0][1].config
+    expect(saved).toMatchObject({
+      iterations: 3,
+      delay: 250,
+      executeScripts: true,
+      keepVariableValues: false,
+    })
+    expect(saved).not.toHaveProperty("caseTimeoutMs")
+  })
+
+  it("keeps case definitions, time limits and saved selection when reopened", async () => {
+    const first = {
+      ...newRequestCase(),
+      id: "case-first",
+      name: "Timed case",
+      timeoutMs: 1234,
+    }
+    mocks.caseData = {}
+    const target = mount({
+      plan: {
+        ...plan,
+        config: {
+          ...plan.config,
+          selectedCaseIDs: [first.id],
+          selectedRequestIDs: ["request"],
+          casesOnly: true,
+          requestCases: { request: [first] },
+        },
+      },
+    })
+    await submit(target)
+    expect(mocks.api.mock.calls[0][1].config).toMatchObject({
+      selectedCaseIDs: [first.id],
+      requestCases: { request: [first] },
+    })
+  })
+
+  it("preserves execution switches and supports daily and weekly schedules", async () => {
     const target = mount({ plan })
     target
       .querySelectorAll<HTMLButtonElement>('[role="switch"]')
       .forEach((toggle) => toggle.click())
     await nextTick()
-    await submit(target)
-    expect(mocks.api.mock.calls[0][1].config).toEqual({
-      iterations: 3,
-      delay: 250,
-      stopOnError: true,
-      persistResponses: false,
-      executeScripts: false,
-      keepVariableValues: true,
-    })
-  })
-
-  it("retains interval drafts while toggling scheduling and saves the chosen environment", async () => {
-    const target = mount({ plan })
-    await choose(target, "workbench_schedule.rule", "interval")
-    const input = target.querySelector<HTMLInputElement>('input[max="10080"]')!
-    input.value = "45"
-    input.dispatchEvent(new Event("input"))
-    await choose(target, "workbench_schedule.rule", "off")
-    await choose(target, "workbench_schedule.rule", "interval")
-    expect(
-      target.querySelector<HTMLInputElement>('input[max="10080"]')!.value
-    ).toBe("45")
-    await choose(target, "workbench_schedule.environment", "env")
+    await choose(target, "workbench_schedule.rule", "daily")
     await submit(target)
     expect(mocks.api.mock.calls[0][1]).toMatchObject({
-      environmentID: "env",
-      rule: { type: "interval", minutes: 45 },
-    })
-  })
-
-  it("restores the saved schedule draft after disabling and reopening a plan", async () => {
-    const target = mount({
-      plan,
-      schedule: {
-        planID: "plan",
-        environmentID: null,
-        rule: { type: "interval", minutes: 45 },
-        nextRunAt: 123,
+      rule: { type: "daily" },
+      config: {
+        executeScripts: false,
+        stopOnError: true,
+        persistResponses: false,
+        keepVariableValues: false,
       },
     })
-    await choose(target, "workbench_schedule.rule", "off")
+    await choose(target, "workbench_schedule.rule", "weekly")
     await submit(target)
-    const saved = mocks.api.mock.calls[0][1]
-    expect(saved.rule).toBeNull()
-    expect(saved.draftRule).toEqual({ type: "interval", minutes: 45 })
-    const reopened = mount({
-      plan,
-      schedule: { ...saved, planID: "plan", nextRunAt: null },
-    })
-    expect(
-      reopened.querySelector<HTMLSelectElement>(
-        'select[aria-label="workbench_schedule.rule"]'
-      )!.value
-    ).toBe("off")
-    await choose(reopened, "workbench_schedule.rule", "interval")
-    expect(
-      reopened.querySelector<HTMLInputElement>('input[max="10080"]')!.value
-    ).toBe("45")
+    expect(mocks.api.mock.calls[1][1].rule).toMatchObject({ type: "weekly" })
   })
 
-  it("blocks saving a deleted target until another target is selected", async () => {
-    const target = mount({ plan: { ...plan, requestID: "deleted" } })
-    expect(target.querySelector('[role="alert"]')?.textContent).toContain(
-      "workbench_schedule.target_missing"
-    )
-    await submit(target)
-    expect(mocks.api).not.toHaveBeenCalled()
-  })
-
-  it.each(["0", "1.5", "1001"])(
-    "rejects invalid iterations %s before saving",
-    async (value) => {
-      const target = mount({ plan })
-      const input = target.querySelector<HTMLInputElement>(
-        '[name="iterations"]'
-      )!
-      input.value = value
-      input.dispatchEvent(new Event("input"))
-      await nextTick()
-      await submit(target)
-      expect(mocks.api).not.toHaveBeenCalled()
-    }
-  )
-
-  it("supports local targets and hides scheduling in the desktop editor", async () => {
+  it("supports native manual plans with the same case selection", async () => {
     mocks.scheduling = false
-    const target = mount({
-      plan: {
-        id: "local",
-        name: "Local",
-        collectionID: "local-group",
-        requestID: "local-request",
-      },
+    const target = mount({ plan })
+    await submit(target)
+    expect(mocks.api.mock.calls[0][0]).toBe("configs/automation/plan")
+    expect(mocks.api.mock.calls[0][1]).toMatchObject({
+      requestID: "request",
+      config: { selectedRequestIDs: ["request"], casesOnly: true },
     })
     expect(
       target.querySelector('select[aria-label="workbench_schedule.rule"]')
     ).toBeNull()
-    await submit(target)
-    expect(mocks.api).toHaveBeenCalledWith("configs/automation/local", {
-      collectionID: "local-group",
-      requestID: "local-request",
-      environmentID: undefined,
-      config: getAutomationConfig({}, { delay: 500, keepVariableValues: true }),
-    })
-  })
-
-  it("uses shared new-plan defaults on desktop while keeping legacy defaults only for existing plans", async () => {
-    mocks.scheduling = false
-    const target = mount()
-    Array.from(target.querySelectorAll<HTMLButtonElement>("[aria-pressed]"))
-      .find((button) => button.title === "Local group")!
-      .click()
-    await nextTick()
-    await submit(target)
-    expect(mocks.api).toHaveBeenCalledWith("configs/automation", {
-      collectionID: "local-group",
-      requestID: null,
-      environmentID: undefined,
-      config: getAutomationConfig(),
-    })
   })
 })

@@ -11,7 +11,12 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import * as E from 'fp-ts/Either';
-import { getAutomationConfig } from '@apirequest/data';
+import {
+  getAutomationConfig,
+  DEFAULT_CASE_TIMEOUT_MS,
+  type AutomationConfig,
+} from '@apirequest/data';
+import { ReqType } from 'src/types/RequestTypes';
 import { LOCAL_WORKSPACE_UID } from 'src/auth/local-workspace/policy';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CollectionFolder } from 'src/types/CollectionFolder';
@@ -20,6 +25,7 @@ import { decrypt, encrypt, transformCollectionData } from 'src/utils';
 import { object, validateData } from './contract';
 import { McpDomainService } from './domain.service';
 import { workbenchEvents } from '../workbench-events';
+import { AutomationWebhookService } from './automation-webhook.service';
 
 type Rule =
   | { type: 'interval'; minutes: number }
@@ -235,6 +241,7 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly domain: McpDomainService,
     private readonly collections: UserCollectionService,
+    private readonly webhooks?: AutomationWebhookService,
   ) {}
 
   async schedules(ownerUid: string) {
@@ -249,6 +256,7 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
   }
 
   async reports(ownerUid: string) {
+    const deliveries = await this.webhooks?.deliveries(ownerUid);
     const rows = await this.prisma.workbenchConfig.findMany({
       where: { ownerUid, kind: reportKind },
       orderBy: { createdOn: 'desc' },
@@ -271,6 +279,8 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
         const { recovery, ...visible } = report;
         return {
           ...visible,
+          backendStored: true,
+          notification: deliveries?.get(id),
           canResume: !!recovery,
           uncertainRequest: [
             'interrupted',
@@ -540,6 +550,9 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
     const id = resumed?.id ?? randomUUID();
     if (this.activeRuns.has(id)) return;
     let name = resumed?.name ?? 'Automation';
+    let environmentName = resumed?.environmentName;
+    let webhook = resumed?.recovery?.input?.config
+      ?.webhook as AutomationConfig['webhook'];
     const run = {
       id,
       ownerUid,
@@ -654,9 +667,49 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
           ownerUid,
         );
         name = plan.name;
+        webhook = plan.config?.webhook;
         run.name = name;
         let tree: CollectionFolder;
-        if (plan.requestID) {
+        if (plan.config?.selectedRequestIDs) {
+          const selectedIDs = new Set<string>(plan.config.selectedRequestIDs);
+          if (!selectedIDs.size) throw new Error('No test cases selected');
+          const exported = await this.collections.exportUserCollectionsToJSON(
+            ownerUid,
+            null,
+            ReqType.REST,
+          );
+          if (E.isLeft(exported)) throw new Error('collection_missing');
+          const found = new Set<string>();
+          const prune = (node: CollectionFolder): CollectionFolder => ({
+            ...node,
+            folders: node.folders
+              .map(prune)
+              .filter(
+                (folder) => folder.folders.length || folder.requests.length,
+              ),
+            requests: node.requests.filter((request) => {
+              if (!selectedIDs.has(request.id)) return false;
+              found.add(request.id);
+              return true;
+            }),
+          });
+          const folders = (
+            JSON.parse(exported.right.exportedCollection) as CollectionFolder[]
+          )
+            .map(prune)
+            .filter(
+              (folder) => folder.folders.length || folder.requests.length,
+            );
+          if (found.size !== selectedIDs.size)
+            throw new Error('request_missing');
+          tree = {
+            id: 'automation-selection',
+            name: plan.name,
+            data: null,
+            folders,
+            requests: [],
+          };
+        } else if (plan.requestID) {
           const request = await this.prisma.userRequest.findFirst({
             where: { id: plan.requestID, userUid: ownerUid },
             include: { userCollection: true },
@@ -724,8 +777,36 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
         ]);
         if (schedule.environmentID && !selected)
           throw new Error('environment_missing');
+        const caseEnvironments: Record<
+          string,
+          ReturnType<typeof variables>
+        > = {};
+        const caseEnvironmentIDs = new Set<string>();
+        for (const entries of Object.values(
+          plan.config?.requestCases ?? {},
+        ) as { id: string; environmentID?: string | null }[][])
+          for (const entry of entries)
+            if (
+              entry.environmentID &&
+              (!plan.config.selectedCaseIDs ||
+                plan.config.selectedCaseIDs.includes(entry.id))
+            )
+              caseEnvironmentIDs.add(entry.environmentID);
+        for (const environmentID of caseEnvironmentIDs) {
+          const environment = await this.prisma.userEnvironment.findFirst({
+            where: { id: environmentID, userUid: ownerUid, isGlobal: false },
+          });
+          if (!environment) throw new Error('case_environment_missing');
+          caseEnvironments[environmentID] = variables(
+            environment.variables,
+            environmentID === schedule.environmentID
+              ? schedule.overrides
+              : undefined,
+          );
+        }
         result = await this.run(
           {
+            caseEnvironments,
             collection: tree,
             envs: {
               selected: variables(selected?.variables, schedule.overrides),
@@ -737,6 +818,7 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
           id,
           statusCallback,
         );
+        environmentName = selected?.name;
         result.recovery = undefined;
       }
     } catch (error) {
@@ -791,11 +873,28 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
       if (run.discarded) return;
       // Final write follows all acknowledged progress writes.
       run.status = 'running';
+      result.environmentID = schedule.environmentID;
+      result.environmentName = environmentName;
       await record();
       run.status = (result.summary as { failed?: number })?.failed
         ? 'failed'
         : 'completed';
       workbenchEvents.publish(ownerUid, 'automation');
+      void this.webhooks
+        ?.notify(
+          ownerUid,
+          {
+            ...result,
+            id,
+            name,
+            createdAt: resumed?.createdAt ?? new Date(started).toISOString(),
+            automation: { ...result.automation, totalRequests: run.total },
+          },
+          webhook,
+        )
+        .catch(() =>
+          this.logger.warn('Webhook delivery could not be recorded'),
+        );
     } finally {
       this.runActions.delete(id);
       this.runDiscards.delete(id);
@@ -844,10 +943,30 @@ export class WorkbenchAutomationService implements OnModuleDestroy {
     this.workers.add(worker);
     worker.stdout.resume();
     worker.stderr.resume();
+    const caseConfig = (workerData as { config?: AutomationConfig }).config;
+    const caseCount = Object.values(caseConfig?.requestCases ?? {})
+      .flat()
+      .filter(
+        (entry) =>
+          !caseConfig?.selectedCaseIDs ||
+          caseConfig.selectedCaseIDs.includes(entry.id),
+      );
+    const caseBudget =
+      caseCount.reduce(
+        (sum, entry) =>
+          sum +
+          (entry.timeoutMs ?? DEFAULT_CASE_TIMEOUT_MS) +
+          (caseConfig?.delay ?? 0),
+        0,
+      ) * (caseConfig?.iterations ?? 1);
+    const runBudget = Math.min(
+      2_147_483_647,
+      Math.max(timeoutMs, caseBudget + 30_000),
+    );
     let timer: NodeJS.Timeout;
     try {
       return await new Promise((resolve, reject) => {
-        let remaining = timeoutMs;
+        let remaining = runBudget;
         let resumedAt = Date.now();
         let paused = false;
         let timerPaused = false;

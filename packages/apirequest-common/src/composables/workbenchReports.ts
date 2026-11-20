@@ -55,6 +55,8 @@ export type WorkbenchReport = {
   uncertainRequest?: { name: string; iteration: number }
   runTabID?: string
   updatedAt?: string
+  notification?: import("~/helpers/notification-channels").NotificationDelivery
+  backendStored?: boolean
   errorDetails?: { code: string; data: unknown }[]
   trigger?: "schedule"
   createdAt: string

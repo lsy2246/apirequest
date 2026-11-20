@@ -1,6 +1,10 @@
 import { ref } from "vue"
 import { cloneDeep } from "lodash-es"
-import type { HoppCollection, HoppCollectionVariable } from "@apirequest/data"
+import {
+  AutomationWebhookReportSchema,
+  type HoppCollection,
+  type HoppCollectionVariable,
+} from "@apirequest/data"
 import type { HoppTab } from "~/services/tab"
 import type {
   HoppTestRunnerDocument,
@@ -18,6 +22,10 @@ import {
 } from "~/composables/workbenchReports"
 import { collectReportSteps, reportError } from "./report"
 import { savedReportTab } from "./saved-report"
+import {
+  workbenchMcpAPI,
+  workbenchSchedulesAvailable,
+} from "~/helpers/workbench-mcp"
 
 export function startRecordedRun(
   tab: HoppTab<HoppTestRunnerDocument>,
@@ -36,6 +44,7 @@ export function startRecordedRun(
   const id = previous?.id ?? crypto.randomUUID()
   const createdAt = previous?.createdAt ?? new Date().toISOString()
   const started = performance.now()
+  let finalReport: WorkbenchReport | undefined
   return Promise.resolve(
     getService(TestRunnerService).runTests(
       runningTab,
@@ -49,7 +58,7 @@ export function startRecordedRun(
           const steps = collectReportSteps(doc.iterationResults ?? [])
           const status = doc.status === "stopped" ? "paused" : doc.status
           const checkpoint = status === "completed" ? undefined : doc.recovery
-          await add({
+          const report: WorkbenchReport = {
             id,
             kind: "automation",
             name: collection.name,
@@ -88,14 +97,41 @@ export function startRecordedRun(
               failedTests: doc.testRunnerMeta.failedTests,
               totalTests: doc.testRunnerMeta.totalTests,
             },
-          })
+          }
+          finalReport = report
+          await add(report)
         },
       },
       ancestors.pre,
       ancestors.test,
       ancestors.variables
     )
-  )
+  ).then(async (result) => {
+    if (
+      config.webhook?.enabled &&
+      workbenchSchedulesAvailable() &&
+      finalReport &&
+      ["completed", "error"].includes(finalReport.automation?.status ?? "")
+    ) {
+      try {
+        await workbenchMcpAPI("automation/webhook/notify", {
+          webhook: config.webhook,
+          report: AutomationWebhookReportSchema.parse(finalReport),
+        })
+        await add({
+          ...finalReport,
+          backendStored: true,
+          notification: { status: "pending", attempts: 0 },
+        })
+      } catch {
+        await add({
+          ...finalReport,
+          notification: { status: "failed", attempts: 0 },
+        }).catch(() => {})
+      }
+    }
+    return result
+  })
 }
 
 export function resumeRecordedRun(
