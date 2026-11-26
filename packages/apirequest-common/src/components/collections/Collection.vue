@@ -22,10 +22,10 @@
       ></div>
       <div
         class="z-[3] group pointer-events-auto relative flex cursor-pointer items-stretch"
-        :draggable="!hasNoTeamAccess"
+        :draggable="!hasNoTeamAccess && !unloaded"
         @dragstart="dragStart"
-        @drop="handelDrop($event)"
-        @dragover="handleDragOver($event)"
+        @drop="!unloaded && handelDrop($event)"
+        @dragover="!unloaded && handleDragOver($event)"
         @dragleave="resetDragState"
         @dragend="
           () => {
@@ -33,11 +33,17 @@
             dropItemID = ''
           }
         "
-        @contextmenu.prevent="options?.tippy?.show()"
+        @contextmenu.prevent="!unloaded && options?.tippy?.show()"
       >
         <div
           class="flex min-w-0 flex-1 items-center justify-center"
-          @click="emit('toggle-children')"
+          @click="() => {
+            if (props.data?.id && remoteFolderErrors.has(props.data.id)) {
+              void retryRemoteFolder(props.data.id).catch(console.error)
+              return
+            }
+            emit('toggle-children')
+          }"
         >
           <span
             class="pointer-events-none flex items-center justify-center px-4"
@@ -69,12 +75,19 @@
         </div>
 
         <div
-          v-if="isCollectionLoading && !isOpen"
+          v-if="(isCollectionLoading && !isOpen) || remoteFolderLoading.has(props.data?.id ?? '')"
           class="flex items-center px-2"
         >
           <HoppSmartSpinner />
         </div>
-        <div v-else class="flex">
+        <span v-else-if="props.data?.id && remoteFolderErrors.has(props.data.id)"
+          class="pr-2 text-tiny text-red-400">加载失败，点击重试</span>
+        <button v-else-if="props.data?.id && remoteFolderHasMore(props.data.id)"
+          type="button" class="pr-2 text-tiny text-secondaryLight hover:text-secondary"
+          @click.stop="void ensureRemoteFolder(props.data.id, true).catch(console.error)">
+          加载全部以编辑
+        </button>
+        <div v-else-if="!unloaded" class="flex">
           <HoppButtonSecondary
             v-if="!hasNoTeamAccess"
             v-tippy="{ theme: 'tooltip' }"
@@ -310,6 +323,8 @@ import { useI18n } from "@composables/i18n"
 import { useDocumentationVisibility } from "~/composables/documentationVisibility"
 import { useGqlWorkspaceVisibility } from "~/composables/gqlWorkspaceVisibility"
 import { HoppCollection } from "@apirequest/data"
+import { ensureRemoteFolder, remoteFolderHasMore, remoteFolderLoading, remoteFolderErrors, retryRemoteFolder, usesLazyRemoteCollections } from "~/helpers/remote-collections"
+import { isRootRequestCollection } from "~/newstore/collections"
 import { computed, ref, watch } from "vue"
 import { TippyComponent } from "vue-tippy"
 import { useReadonlyStream } from "~/composables/stream"
@@ -417,6 +432,9 @@ const sortAction = ref<HTMLButtonElement | null>(null)
 const documentationAction = ref<HTMLButtonElement | null>(null)
 const { isDocumentationVisible } = useDocumentationVisibility()
 const { isGqlWorkspaceEnabled } = useGqlWorkspaceVisibility()
+const unloaded = computed(() =>
+  (props.data as HoppCollection & { __workbenchUnloaded?: boolean })?.__workbenchUnloaded === true ||
+  (usesLazyRemoteCollections() && isRootRequestCollection(props.data as HoppCollection)))
 const dragging = ref(false)
 const ordering = ref(false)
 const orderingLastItem = ref(false)
@@ -485,7 +503,7 @@ watch(
   () => [props.exportLoading, props.duplicateCollectionLoading],
   ([newExportLoadingVal, newDuplicateCollectionLoadingVal]) => {
     if (!newExportLoadingVal && !newDuplicateCollectionLoadingVal) {
-      options.value!.tippy?.hide()
+      options.value?.tippy?.hide()
     }
   }
 )

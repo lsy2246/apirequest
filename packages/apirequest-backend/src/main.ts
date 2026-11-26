@@ -15,6 +15,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import compression from 'compression';
 
+// The bare /mock route (with an optional trailing slash) opens the management UI.
+function isMockEndpoint(path: string): boolean {
+  return path.startsWith('/mock/') && path !== '/mock/';
+}
+
 function warnIfExampleSecrets(configService: ConfigService): void {
   if (
     configService.get('DATA_ENCRYPTION_KEY') ===
@@ -101,7 +106,7 @@ export async function bootstrap() {
   app.use((req, res, next) => {
     try {
       const publicEndpoint =
-        req.path.startsWith('/mock/') ||
+        isMockEndpoint(req.path) ||
         req.path.startsWith('/v1/published-docs/');
       const needsOrigin =
         !['GET', 'HEAD', 'OPTIONS'].includes(req.method) ||
@@ -123,7 +128,7 @@ export async function bootstrap() {
   app.use(compression({
     level: 4,
     filter: (req, res) =>
-      !req.path.startsWith('/mock/') &&
+      !isMockEndpoint(req.path) &&
       !String(res.getHeader('Content-Type') ?? '').includes('text/event-stream') &&
       compression.filter(req, res),
   }));
@@ -152,7 +157,7 @@ export async function bootstrap() {
       },
     });
     app.use((req, res, next) => {
-      const apiPath = /^\/(v1|graphql|mock|health)(\/|$)/.test(req.path);
+      const apiPath = isMockEndpoint(req.path) || /^\/(v1|graphql|health)(\/|$)/.test(req.path);
       if (req.method === 'GET' && !apiPath && req.accepts('html'))
         return res.sendFile(resolve(root, 'index.html'));
       next();

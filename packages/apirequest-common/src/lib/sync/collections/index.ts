@@ -16,7 +16,7 @@ import { addRESTCollection, addRESTFolder, cascadeParentCollectionForProperties,
 import { platform } from "~/platform";
 import { runDispatchWithOutSyncing } from "..";
 import { importToPersonalWorkspace } from "./import";
-import { isCollectionRequestSummary } from "~/helpers/collection-summary";
+import { hasUnloadedCollectionRequests, isCollectionRequestSummary } from "~/helpers/collection-summary";
 function initCollectionsSync() {
   const authEvents$ = platform.auth.getAuthEventsStream()
   const currentUser$ = platform.auth.getCurrentUserStream()
@@ -333,6 +333,7 @@ export function applyLocalWorkspaceSnapshot(
   fetched: HoppCollection[]
 ) {
   const findRequest = indexSyncedRequests(fetched)
+  const incomplete = hasUnloadedCollectionRequests(fetched)
   const protocol = collectionType === "REST" ? "rest" : "graphql"
   const tabs =
     collectionType === "REST"
@@ -377,6 +378,9 @@ export function applyLocalWorkspaceSnapshot(
       (doc.type === "example-response" || doc.type === "gql-example-response")
         ? doc.response.name
         : undefined
+    // At startup even the previous tree can be empty. A partial index cannot
+    // prove deletion, including when the request moved to an unloaded folder.
+    if (!location && incomplete) continue
     if (
       !location ||
       !next ||
@@ -400,7 +404,7 @@ export function applyLocalWorkspaceSnapshot(
       location.folderPath,
       protocol
     )
-    if (doc.isDirty || !tabRequest) continue
+    if (doc.isDirty || !tabRequest || isCollectionRequestSummary(next)) continue
     const updated = cloneDeep(next)
     if (!("type" in doc) || doc.type === "gql-request") {
       if (!isGQLRequest(updated)) continue

@@ -8,6 +8,12 @@ type RequestLocation = {
 type CollectionRequest = HoppCollection["requests"][number]
 type RequestIdentity = Pick<CollectionRequest, "id" | "_ref_id">
 
+/** Prefer database identity; references support requests not yet assigned an ID. */
+export function matchesCollectionRequest(identity: RequestIdentity, candidate: RequestIdentity) {
+  if (identity.id) return identity.id === candidate.id
+  return !!identity._ref_id && identity._ref_id === (candidate._ref_id || candidate.id)
+}
+
 // 集合顺序由后端决定。重新绑定标签页时按身份查找，旧索引只用于识别原请求。
 export function indexSyncedRequests(collections: HoppCollection[]) {
   const byID = new Map<string, RequestLocation>()

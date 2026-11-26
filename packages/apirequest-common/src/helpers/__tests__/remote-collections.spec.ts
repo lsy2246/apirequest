@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { getDefaultGQLRequest, getDefaultRESTRequest, makeCollection, type HoppCollection } from "@apirequest/data"
+import { getDefaultGQLRequest, getDefaultRESTRequest, type HoppCollection } from "@apirequest/data"
 import { assertCollectionLoaded, assertCollectionRequestLoaded, collectPendingCollections, isCollectionRequestSummary, mergePendingCollections } from "../collection-summary"
 import type { RemoteCollectionIndex } from "../remote-collections"
 
@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   state: { value: { state: [] as HoppCollection[] } },
   get: vi.fn(), post: vi.fn(), read: vi.fn(), write: vi.fn(), set: vi.fn(),
 }))
-vi.mock("axios", () => ({ default: { get: mocks.get, post: mocks.post } }))
+vi.mock("axios", () => ({ default: { get: mocks.get, post: mocks.post, isAxiosError: (value: unknown) => !!(value as { response?: unknown })?.response } }))
 vi.mock("~/platform", () => ({ platform: { auth: { localSessionState: { value: "ready" } } } }))
 vi.mock("~/lib/sync", () => ({ runDispatchWithOutSyncing: (fn: () => void) => fn() }))
 vi.mock("~/newstore/collections", () => ({
@@ -75,6 +75,173 @@ describe("remote collection detail loading", () => {
     await remote.refreshRemoteCollectionIndex()
   })
 
+  it("opens with folders only and loads a folder across cursor pages", async () => {
+    const opening = { ...snapshot(), revision: "lazy-index-1", lazyRequests: true, requests: [] }
+    mocks.get.mockResolvedValueOnce({ status: 200, data: opening })
+    await remote.initRemoteCollectionIndex()
+    expect(mocks.state.value.state[0].folders[0].requests).toEqual([])
+    expect(() => assertCollectionLoaded(mocks.state.value.state[0])).toThrow("尚未加载")
+    mocks.get.mockResolvedValueOnce({ data: {
+      revision: "lazy-index-1", requests: [snapshot().requests[0]],
+      nextCursor: { orderIndex: 0, id: "one" },
+    } }).mockResolvedValueOnce({ data: {
+      revision: "lazy-index-1", requests: [], nextCursor: null,
+    } })
+    await remote.ensureRemoteFolder("folder")
+    expect(mocks.state.value.state[0].folders[0].requests[0].name).toBe("One")
+    expect(remote.remoteFolderHasMore("folder")).toBe(true)
+    expect(() => assertCollectionLoaded(mocks.state.value.state[0].folders[0])).toThrow("尚未加载")
+    await remote.ensureRemoteFolder("folder")
+    expect(mocks.get.mock.calls.at(-1)?.[1]?.params).toMatchObject({ cursorID: "one" })
+    expect(remote.remoteFolderHasMore("folder")).toBe(false)
+    expect(mocks.get).toHaveBeenCalledTimes(3)
+  })
+
+  it("locates an unloaded nested request beyond the first page using its ID", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), revision: "lazy-index-1", lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockResolvedValueOnce({ data: detail() })
+      .mockResolvedValueOnce({ data: {
+        revision: "lazy-index-1", requests: [{ ...snapshot().requests[0], id: "other", refID: "other" }],
+        nextCursor: { orderIndex: 0, id: "other" },
+      } })
+      .mockResolvedValueOnce({ data: {
+        revision: "lazy-index-1", requests: [snapshot().requests[0]],
+        nextCursor: { orderIndex: 1, id: "one" },
+      } })
+    expect(await remote.ensureRemoteRequestLocation({ id: "one" }, { folderPath: "9/9" }))
+      .toEqual({ folderPath: "0/0", requestIndex: 1 })
+    expect(mocks.get.mock.calls.slice(2).map(([url]) => url)).toEqual([
+      expect.stringMatching(/folders\/folder\/requests$/), expect.stringMatching(/folders\/folder\/requests$/),
+    ])
+    expect(remote.isRemoteFolderLoaded("folder")).toBe(false)
+    expect(mocks.get).toHaveBeenCalledTimes(4)
+  })
+
+  it("does not load pages when restoration is cancelled or an ancestor is collapsed", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockResolvedValueOnce({ data: detail() })
+    const canLoad = vi.fn(() => false)
+    expect(await remote.ensureRemoteRequestLocation({ id: "one" }, { canLoad })).toBeUndefined()
+    expect(canLoad).toHaveBeenCalledWith("0/0")
+    expect(mocks.get).toHaveBeenCalledTimes(2)
+  })
+
+  it("stops looking for a deleted request without scanning the workspace", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockRejectedValueOnce({ response: { status: 404 } })
+    expect(await remote.ensureRemoteRequestLocation({ id: "deleted" })).toBeUndefined()
+    expect(mocks.get).toHaveBeenCalledTimes(2)
+  })
+
+  it("recovers a lost tab association only when the original reference matches", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), revision: "lazy-index-1", lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockResolvedValueOnce({ data: detail() }).mockResolvedValueOnce({ data: {
+      revision: "lazy-index-1", requests: [snapshot().requests[0]], nextCursor: null,
+    } })
+    expect(await remote.ensureRemoteRequestLocation({ id: "one", _ref_id: "one-ref" }, { recoverDetached: true }))
+      .toEqual({ folderPath: "0/0", requestIndex: 0 })
+    expect(await remote.ensureRemoteRequestLocation({ id: "one", _ref_id: "copy-ref" }, { recoverDetached: true }))
+      .toBeUndefined()
+  })
+
+  it("does not attach an unsaved copy to its source or load the source folder", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockResolvedValueOnce({ data: detail() })
+    expect(await remote.ensureRemoteRequestLocation({ id: "one", _ref_id: "copy-ref" }, { recoverDetached: true }))
+      .toBeUndefined()
+    expect(mocks.get).toHaveBeenCalledTimes(2)
+  })
+
+  it("merges concurrently loaded folders without losing either page", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), revision: "lazy-index-1", lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockImplementation((url: string) => Promise.resolve({ data: {
+      revision: "lazy-index-1", nextCursor: null,
+      requests: [snapshot().requests.find((row) => row.collectionID === (url.includes("/root/") ? "root" : "folder"))],
+    } }))
+    await Promise.all([remote.ensureRemoteFolder("folder"), remote.ensureRemoteFolder("root")])
+    expect(mocks.state.value.state[0].folders[0].requests[0].id).toBe("one")
+    expect(mocks.state.value.state[0].requests[0].id).toBe("two")
+    expect(mocks.get).toHaveBeenCalledTimes(3)
+  })
+
+  it("loads missing summaries before exporting a lazy collection", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), revision: "lazy-index-1", lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockImplementation((url: string) => Promise.resolve({ data: {
+      revision: "lazy-index-1", nextCursor: null,
+      requests: snapshot().requests.filter((row) => row.collectionID === (url.includes("/root/") ? "root" : "folder")),
+    } }))
+    mocks.post.mockResolvedValue({ data: [detail(), detail("two")] })
+    const exported = await remote.ensureRemoteCollection(mocks.state.value.state[0])
+    expect(() => assertCollectionLoaded(exported)).not.toThrow()
+    expect(exported.requests[0].id).toBe("two")
+    expect(exported.folders[0].requests[0].id).toBe("one")
+  })
+
+  it("loads every page before exporting a partially visible folder", async () => {
+    const opening = { ...snapshot(), revision: "lazy-index-1", lazyRequests: true, requests: [] }
+    mocks.get.mockResolvedValueOnce({ status: 200, data: opening })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockResolvedValueOnce({ data: {
+      revision: "lazy-index-1", requests: [snapshot().requests[0]],
+      nextCursor: { orderIndex: 0, id: "one" },
+    } }).mockResolvedValueOnce({ data: {
+      revision: "lazy-index-1", requests: [{ ...snapshot().requests[0], id: "another", orderIndex: 1 }],
+      nextCursor: null,
+    } })
+    await remote.ensureRemoteFolder("folder")
+    mocks.post.mockImplementation((_url: string, payload: { ids: string[] }) =>
+      Promise.resolve({ data: payload.ids.map((id) => ({ ...detail(), id })) }))
+    const exported = await remote.ensureRemoteCollection(mocks.state.value.state[0].folders[0])
+    expect(exported.requests).toHaveLength(2)
+    expect(() => assertCollectionLoaded(exported)).not.toThrow()
+    expect(mocks.get).toHaveBeenCalledTimes(3)
+  })
+
+  it("searches unloaded folders on the server without loading all summaries", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), revision: "lazy-index-1", lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockResolvedValueOnce({ data: [snapshot().requests[0]] })
+    expect(await remote.searchRemoteRequests("One")).toMatchObject([{ id: "one" }])
+    expect(mocks.get.mock.calls.at(-1)?.[0]).toMatch(/collections\/search$/)
+    expect(mocks.state.value.state[0].folders[0].requests).toEqual([])
+  })
+
+  it("splits a large export into bounded detail requests", async () => {
+    const large = snapshot()
+    large.requests = Array.from({ length: 201 }, (_, index) => ({
+      ...large.requests[0], id: `r-${index}`,
+    }))
+    const tree = remote.buildRemoteCollectionTree(large)
+    mocks.post.mockImplementation((_url: string, payload: { ids: string[] }) =>
+      Promise.resolve({ data: payload.ids.map((id) => ({ ...detail(), id })) }))
+    const result = await remote.ensureRemoteCollection(tree[0])
+    expect(result.folders[0].requests).toHaveLength(201)
+    expect(mocks.post.mock.calls.map((call) => call[1].ids.length)).toEqual([200, 1])
+  })
+
   it("coalesces simultaneous opens and preserves the complete body and scripts", async () => {
     const tree = install(), summary = tree[0].folders[0].requests[0]
     mocks.get.mockResolvedValue({ data: detail() })
@@ -87,6 +254,34 @@ describe("remote collection detail loading", () => {
     expect(mocks.get).toHaveBeenCalledTimes(1)
     expect(mocks.state.value.state[0].folders[0].requests[0]).toBe(full)
     expect(mocks.write).toHaveBeenCalledWith("requests", "one", expect.objectContaining({ revision: "v1", request: full }))
+  })
+
+  it("hydrates a single indexed request while retaining other tree branches", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: snapshot() })
+    await remote.initRemoteCollectionIndex()
+    const rootRequest = mocks.state.value.state[0].requests[0]
+    const summary = mocks.state.value.state[0].folders[0].requests[0]
+    mocks.get.mockResolvedValueOnce({ data: detail() })
+    const full = await remote.ensureRemoteRequest(summary)
+    expect(mocks.state.value.state[0].folders[0].requests[0]).toBe(full)
+    expect(mocks.state.value.state[0].requests[0]).toBe(rootRequest)
+  })
+
+  it("updates an indexed request without replacing an edited request that changed during loading", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: snapshot() })
+    await remote.initRemoteCollectionIndex()
+    const originalRootRequest = mocks.state.value.state[0].requests[0]
+    const summary = mocks.state.value.state[0].folders[0].requests[0]
+    let complete!: (value: unknown) => void
+    mocks.get.mockReturnValueOnce(new Promise((resolve) => { complete = resolve }))
+    const loading = remote.ensureRemoteRequest(summary)
+    await Promise.resolve()
+    const edited = { ...getDefaultRESTRequest(), id: "one", name: "Unsaved edit" }
+    mocks.state.value.state[0].folders[0].requests[0] = edited
+    complete({ data: detail() })
+    await loading
+    expect(mocks.state.value.state[0].folders[0].requests[0]).toBe(edited)
+    expect(mocks.state.value.state[0].requests[0]).toBe(originalRootRequest)
   })
 
   it("reuses a matching cached detail and fetches a detail whose version has changed", async () => {
@@ -151,6 +346,6 @@ describe("remote collection detail loading", () => {
     expect(pending[0].folders[0].requests).toEqual([local])
     expect(JSON.stringify(pending)).not.toContain("__workbenchSummary")
     const merged = mergePendingCollections(remote.buildRemoteCollectionTree(snapshot()), pending)
-    expect(merged[0].folders[0].requests.map((request) => request.name)).toEqual(["One", "Not uploaded"])
+    expect(merged[0].folders[0].requests.map((request: HoppCollection["requests"][number]) => request.name)).toEqual(["One", "Not uploaded"])
   })
 })

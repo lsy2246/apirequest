@@ -266,6 +266,7 @@ model UserRequest {
   createdOn    DateTime @default(now()) @db.Timestamptz(3)
   updatedOn    DateTime @updatedAt @db.Timestamptz(3)
 
+  summary        UserRequestSummary?
   userCollection UserCollection @relation(fields: [collectionID], references: [id], onDelete: Cascade)
   user           User           @relation(fields: [userUid], references: [uid], onDelete: Cascade)
 
@@ -289,6 +290,33 @@ model UserCollection {
   requests UserRequest[]
 
   @@unique([userUid, parentID, orderIndex])
+  @@index([userUid, orderIndex, id])
+}
+
+model UserRequestSummary {
+  id           String   @id
+  userUid      String
+  collectionID String
+  title        String
+  orderIndex   Int
+  updatedOn    DateTime @db.Timestamptz(3)
+  refID        String?
+  method       String?
+  endpoint     String?
+  gql          Boolean
+  hasResponses Boolean
+
+  request UserRequest @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  @@index([userUid, orderIndex, id])
+  @@index([userUid, collectionID, orderIndex, id])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "UserRequestSummary_title_trgm_idx")
+  @@index([endpoint(ops: raw("gin_trgm_ops"))], type: Gin, map: "UserRequestSummary_endpoint_trgm_idx")
+}
+
+model WorkspaceIndexRevision {
+  userUid  String @id
+  revision String @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 }
 
 // ============================================================

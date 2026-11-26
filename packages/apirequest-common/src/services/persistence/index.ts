@@ -7,6 +7,7 @@ import { Service } from "dioc"
 import {
   debounceFilter,
   StorageLike,
+  useEventListener,
   watchDebounced,
   watchWithFilter,
 } from "@vueuse/core"
@@ -21,6 +22,7 @@ import {
 
 import { StoreError } from "@apirequest/kernel"
 
+import { openBrowserTabStore } from "./browser-tab-store"
 import { Store } from "~/kernel/store"
 import { platform } from "~/platform"
 import { diag } from "~/kernel/log"
@@ -660,83 +662,104 @@ export class PersistenceService extends Service {
     })
   }
 
-  private async setupWorkspaceTabsPersistence() {
-    const loadResult = await Store.get<any>(
-      STORE_NAMESPACE,
-      STORE_KEYS.REST_TABS
-    )
-
-    if (window.__APIREQUEST_NATIVE__ && E.isLeft(loadResult)) {
-      console.error("Unable to read native tabs", loadResult.left)
-      return
+  public async setupWorkspaceTabsPersistence() {
+    const key = STORE_KEYS.REST_TABS
+    const native = !!window.__APIREQUEST_NATIVE__
+    const browserStore = !native && typeof indexedDB !== "undefined"
+      ? await openBrowserTabStore().catch((error) => {
+          console.warn("Unable to open browser tab storage", error)
+          return undefined
+        })
+      : undefined
+    const write = async (value: unknown, backup = false) => {
+      if (browserStore) {
+        await browserStore.write(value, backup ? `restTabs-backup-${Date.now()}` : "current")
+      } else {
+        const result = await Store.set(STORE_NAMESPACE, backup ? `${key}-backup` : key, value)
+        if (E.isLeft(result)) throw new Error(result.left.message)
+      }
     }
-    try {
-      if (E.isRight(loadResult) && loadResult.right) {
-        // Correcting the request schema for broken data
-        const orderedDocs = loadResult.right.orderedDocs
 
-        const transformedTabs = {
-          ...loadResult.right,
-          orderedDocs,
-        }
-        const result = WORKSPACE_TABS_STATE_SCHEMA.safeParse(transformedTabs)
+    try {
+      let saved = await browserStore?.read()
+      if (saved === undefined) {
+        // Read the original localStorage (or native SQLite) snapshot on first use.
+        const result = await Store.get<unknown>(STORE_NAMESPACE, key)
+        if (E.isLeft(result)) throw new Error(result.left.message)
+        saved = result.right
+      }
+      if (saved != null) {
+        const result = WORKSPACE_TABS_STATE_SCHEMA.safeParse(saved)
+        let state
         if (result.success) {
-          // SAFETY: We know the schema matches
-          this.workspaceTabsService.loadTabsFromPersistedState(
-            result.data as PersistableTabState<HoppTabDocument>
-          )
+          state = result.data
         } else {
-          if (window.__APIREQUEST_NATIVE__) {
-            console.error(
-              "Invalid native tabs; keeping the SQLite data",
-              result.error.message
-            )
+          if (native) {
+            console.error("Invalid native tabs; keeping the SQLite data")
             return
           }
-          this.showErrorToast(STORE_KEYS.REST_TABS)
-          await Store.set(
-            STORE_NAMESPACE,
-            `${STORE_KEYS.REST_TABS}-backup`,
-            loadResult.right
-          )
-          console.error(
-            `Failed parsing persisted REST_TABS:`,
-            JSON.stringify(loadResult.right)
-          )
-          return
+          // Archive the original, including unreadable drafts, before recovering
+          // individual documents. One stale entry must not disable future saves.
+          await write(saved, true)
+          const envelope = z.object({
+            orderedDocs: z.array(z.unknown()),
+            lastActiveTabID: z.string().catch(""),
+          }).safeParse(saved)
+          const validTabs = []
+          for (const entry of envelope.success ? envelope.data.orderedDocs : []) {
+            const tab = WORKSPACE_TABS_STATE_SCHEMA.shape.orderedDocs.element.safeParse(entry)
+            if (tab.success) validTabs.push(tab.data)
+          }
+          state = { orderedDocs: validTabs, lastActiveTabID: envelope.success ? envelope.data.lastActiveTabID : "" }
+          await write(state)
+          useToast().error("部分旧标签无法读取。已备份原始标签，并恢复可读取的接口。")
         }
+        this.workspaceTabsService.loadTabsFromPersistedState(
+          state as PersistableTabState<HoppTabDocument>
+        )
       }
-    } catch (_e) {
-      console.error(`Failed parsing persisted REST_TABS:`, loadResult)
+    } catch (error) {
+      console.error("Unable to restore workspace tabs", error)
+      useToast().error("读取接口标签失败，请检查浏览器存储后重试。")
+      return
     }
 
     const debounceTabEdits = debounceFilter(500)
+    let pendingEdits = false
+    let saveErrorShown = false
+    const persistTabs = async (newData: PersistableTabState<HoppTabDocument>) => {
+      pendingEdits = false
+      try {
+        await write(newData)
+        saveErrorShown = false
+      } catch (error) {
+        pendingEdits = true
+        console.error("Unable to save workspace tabs", error)
+        if (!saveErrorShown) useToast().error("接口标签保存失败，请保留当前页面并检查浏览器存储。")
+        saveErrorShown = true
+      }
+    }
+    const flushTabs = () => {
+      if (!pendingEdits) return
+      debounceTabEdits.cancel()
+      void persistTabs(this.workspaceTabsService.persistableTabState.value)
+    }
+    useEventListener(window, "pagehide", flushTabs)
     watchWithFilter(
       this.workspaceTabsService.persistableTabState,
-      async (newData) => {
-        const result = await Store.set(
-          STORE_NAMESPACE,
-          STORE_KEYS.REST_TABS,
-          newData
-        )
-
-        // A failed write (e.g. QuotaExceededError) silently freezes the
-        // persisted state for every REST tab at the last write that fit.
-        if (E.isLeft(result)) {
-          console.error(
-            `Failed persisting ${STORE_KEYS.REST_TABS}:`,
-            result.left
-          )
-        }
-      },
+      persistTabs,
       {
         deep: true,
         eventFilter(invoke, options) {
           const [next, previous] = options?.args ?? []
-          if (next?.lastActiveTabID === previous?.lastActiveTabID) {
+          const sameOrder = next?.orderedDocs.length === previous?.orderedDocs.length &&
+            next?.orderedDocs.every((entry: { tabID: string }, index: number) => entry.tabID === previous?.orderedDocs[index]?.tabID)
+          if (next?.lastActiveTabID === previous?.lastActiveTabID && sameOrder) {
+            pendingEdits = true
             return debounceTabEdits(invoke, options)
           }
-          // 切换请求后马上刷新时，标签和它的目录位置也需要一并恢复。
+          // Opening, closing, switching and reordering tabs must survive an
+          // immediate refresh; only edits inside an existing tab are debounced.
           debounceTabEdits.cancel()
           return invoke()
         },
@@ -785,7 +808,7 @@ export class PersistenceService extends Service {
       this.setupGlobalEnvsPersistence(),
       this.setupSelectedEnvPersistence(),
 
-      this.setupWorkspaceTabsPersistence(),
+      window.__APIREQUEST_NATIVE__ ? this.setupWorkspaceTabsPersistence() : undefined,
 
       this.setupSecretEnvironmentsPersistence(),
       this.setupCurrentEnvironmentValuePersistence(),

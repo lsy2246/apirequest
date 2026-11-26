@@ -3,7 +3,6 @@ import * as E from "fp-ts/Either";
 import { getService } from "~/modules/dioc";
 
 import { PersistenceService } from "~/services/persistence";
-import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
 import { KernelInterceptorService } from "~/services/kernel-interceptor.service";
 
 import { platform } from "~/platform";
@@ -74,9 +73,8 @@ export class InitializationService extends Service<InitEvent> {
       throw new Error("Cannot initialize tabs before persistence")
     }
 
-    if (!platform.localDesktop) {
-      const workspaceTabsService = getService(WorkspaceTabsService)
-      await workspaceTabsService.init()
+    if (!window.__APIREQUEST_NATIVE__) {
+      await getService(PersistenceService).setupWorkspaceTabsPersistence()
     }
     // 原生统一标签在 setupLater 校验通过后加载。
 

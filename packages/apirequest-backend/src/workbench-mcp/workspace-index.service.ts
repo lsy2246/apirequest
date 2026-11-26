@@ -1,6 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { Prisma } from 'src/generated/prisma/client';
 
 type RequestSummary = {
   id: string;
@@ -19,34 +25,132 @@ type RequestSummary = {
 export class WorkspaceIndexService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async index(userUid: string) {
-    const [collections, requests] = await Promise.all([
-      this.prisma.userCollection.findMany({
-        where: { userUid },
-        orderBy: [{ orderIndex: 'asc' }, { id: 'asc' }],
-        select: {
-          id: true, parentID: true, title: true, type: true, data: true,
-          orderIndex: true, updatedOn: true,
-        },
-      }),
-      // Project summaries in PostgreSQL: loading the complete JSON first would
-      // retain the cost of reading and serializing every request body/example.
-      this.prisma.$queryRaw<RequestSummary[]>`
-        SELECT r.id, r."collectionID", r.title, r."orderIndex", r."updatedOn",
-          d."_ref_id" AS "refID", d.method,
-          COALESCE(d.endpoint, d.url) AS endpoint,
-          (d.query IS NOT NULL AND d.url IS NOT NULL AND d.endpoint IS NULL) AS gql,
-          COALESCE(d.responses <> '{}'::jsonb, false) AS "hasResponses"
-        FROM "UserRequest" r
-        CROSS JOIN LATERAL jsonb_to_record(r.request)
-          AS d("_ref_id" text, method text, endpoint text, url text, query text, responses jsonb)
-        WHERE r."userUid" = ${userUid}
-        ORDER BY r."orderIndex", r.id
-      `,
-    ]);
-    const data = { schemaVersion: 1, collections, requests };
-    const revision = createHash('sha256').update(JSON.stringify(data)).digest('hex');
-    return { ...data, revision };
+  private async readRevision(
+    db: Prisma.TransactionClient | PrismaService,
+    userUid: string,
+  ) {
+    const rows = await db.$queryRaw<{ revision: string }[]>`
+      SELECT "revision"::text AS revision
+      FROM "WorkspaceIndexRevision"
+      WHERE "userUid" = ${userUid}
+    `;
+    // Scope empty workspaces by owner; database UUIDs are shared by all server instances.
+    const scope = createHash('sha256')
+      .update(userUid)
+      .digest('hex')
+      .slice(0, 24);
+    return `db3-${scope}-${rows[0]?.revision ?? '0'}`;
+  }
+
+  async revision(userUid: string) {
+    return this.readRevision(this.prisma, userUid);
+  }
+
+  async index(userUid: string, lazy = false) {
+    return this.prisma.$transaction(
+      async (tx) => {
+        // One snapshot keeps the revision and the rows it describes consistent.
+        const revision = await this.readRevision(tx, userUid);
+        const [collections, requests] = await Promise.all([
+          tx.userCollection.findMany({
+            where: { userUid },
+            orderBy: [{ orderIndex: 'asc' }, { id: 'asc' }],
+            select: {
+              id: true,
+              parentID: true,
+              title: true,
+              type: true,
+              data: true,
+              orderIndex: true,
+              updatedOn: true,
+            },
+          }),
+          lazy
+            ? Promise.resolve([] as RequestSummary[])
+            : tx.$queryRaw<RequestSummary[]>`
+          SELECT "id", "collectionID", "title", "orderIndex", "updatedOn",
+                 "refID", "method", "endpoint", "gql", "hasResponses"
+          FROM "UserRequestSummary"
+          WHERE "userUid" = ${userUid}
+          ORDER BY "orderIndex", "id"
+        `,
+        ]);
+        return {
+          schemaVersion: 1,
+          collections,
+          requests,
+          revision: lazy ? `lazy-${revision}` : revision,
+          ...(lazy ? { lazyRequests: true } : {}),
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+  }
+
+  async folderRequests(
+    userUid: string,
+    collectionID: string,
+    expectedRevision: string,
+    cursorOrder?: number,
+    cursorID?: string,
+  ) {
+    if (
+      !collectionID ||
+      collectionID.length > 200 ||
+      !expectedRevision ||
+      expectedRevision.length > 200 ||
+      (cursorOrder === undefined) !== (cursorID === undefined) ||
+      (cursorOrder !== undefined &&
+        (!Number.isSafeInteger(cursorOrder) ||
+          !cursorID ||
+          cursorID.length > 200))
+    )
+      throw new BadRequestException('Invalid collection page');
+    return this.prisma.$transaction(
+      async (tx) => {
+        const revision = `lazy-${await this.readRevision(tx, userUid)}`;
+        if (revision !== expectedRevision)
+          throw new ConflictException('Workspace index changed');
+        const cursor =
+          cursorOrder === undefined
+            ? Prisma.empty
+            : Prisma.sql`AND ("orderIndex", "id") > (${cursorOrder}, ${cursorID})`;
+        const rows = await tx.$queryRaw<RequestSummary[]>`
+        SELECT "id", "collectionID", "title", "orderIndex", "updatedOn",
+               "refID", "method", "endpoint", "gql", "hasResponses"
+        FROM "UserRequestSummary"
+        WHERE "userUid" = ${userUid} AND "collectionID" = ${collectionID} ${cursor}
+        ORDER BY "orderIndex", "id" LIMIT 201
+      `;
+        const page = rows.slice(0, 200);
+        const last = page[page.length - 1];
+        return {
+          revision,
+          requests: page,
+          nextCursor:
+            rows.length > 200
+              ? { orderIndex: last.orderIndex, id: last.id }
+              : null,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+  }
+
+  async searchRequests(userUid: string, value: unknown) {
+    if (typeof value !== 'string' || value.length > 100)
+      throw new BadRequestException('Invalid search text');
+    const text = value.trim();
+    if (!text) return [];
+    const pattern = `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+    return this.prisma.$queryRaw<RequestSummary[]>`
+      SELECT "id", "collectionID", "title", "orderIndex", "updatedOn",
+             "refID", "method", "endpoint", "gql", "hasResponses"
+      FROM "UserRequestSummary"
+      WHERE "userUid" = ${userUid} AND
+        ("title" ILIKE ${pattern} OR "endpoint" ILIKE ${pattern})
+      ORDER BY ("title" ILIKE ${pattern}) DESC, "title", "id" LIMIT 20
+    `;
   }
 
   async request(userUid: string, id: string) {
@@ -55,16 +159,26 @@ export class WorkspaceIndexService {
   }
 
   async requests(userUid: string, ids: unknown) {
-    if (!Array.isArray(ids) || ids.length > 10000 ||
-        ids.some((id) => typeof id !== 'string' || !id || id.length > 200))
+    if (
+      !Array.isArray(ids) ||
+      ids.length > 10000 ||
+      ids.some((id) => typeof id !== 'string' || !id || id.length > 200)
+    )
       throw new BadRequestException('Invalid request IDs');
     const unique = [...new Set(ids as string[])];
     if (!unique.length) return [];
     const rows = await this.prisma.userRequest.findMany({
       where: { userUid, id: { in: unique } },
-      select: { id: true, title: true, collectionID: true, request: true, updatedOn: true },
+      select: {
+        id: true,
+        title: true,
+        collectionID: true,
+        request: true,
+        updatedOn: true,
+      },
     });
-    if (rows.length !== unique.length) throw new NotFoundException('Request not found');
+    if (rows.length !== unique.length)
+      throw new NotFoundException('Request not found');
     return rows;
   }
 }

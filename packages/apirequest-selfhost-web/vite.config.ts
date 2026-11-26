@@ -339,6 +339,18 @@ export default defineConfig({
       },
       registerType: "prompt",
       workbox: {
+        // A normal refresh must fetch the current deployment, even when another
+        // tab still has an older application open. Do not reload editing tabs.
+        skipWaiting: true,
+        clientsClaim: true,
+        navigateFallback: undefined,
+        globIgnores: ["**/*.html"],
+        runtimeCaching: [{
+          urlPattern: ({ request, url }) => request.mode === "navigate" &&
+            !/^\/(?:v1|graphql|mock|health|assets)(?:\/|$)/.test(url.pathname),
+          handler: "NetworkFirst",
+          options: { cacheName: "apirequest-pages", networkTimeoutSeconds: 3 },
+        }],
         cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 15728640, // 15 MB
         navigateFallbackDenylist: [

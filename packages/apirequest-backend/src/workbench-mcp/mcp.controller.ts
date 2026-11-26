@@ -7,6 +7,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -76,14 +77,48 @@ export class WorkbenchMcpController {
   }
   @Get('collections/index')
   @UseGuards(JwtAuthGuard)
-  async collectionIndex(@Req() req: OwnerRequest, @Res() res: Response) {
+  async collectionIndex(
+    @Req() req: OwnerRequest,
+    @Res() res: Response,
+    @Query('lazy') lazy: string,
+  ) {
     this.owner(req);
-    const data = await this.workspaceIndex.index(req.user.uid);
-    const etag = `W/"${data.revision}"`;
+    const isLazy = lazy === '1';
+    const currentRevision = req.headers['if-none-match']
+      ? `${isLazy ? 'lazy-' : ''}${await this.workspaceIndex.revision(req.user.uid)}`
+      : undefined;
     res.setHeader('Cache-Control', 'private, no-cache');
-    res.setHeader('ETag', etag);
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    if (req.headers['if-none-match'] === `W/"${currentRevision}"`) {
+      res.setHeader('ETag', `W/"${currentRevision}"`);
+      return res.status(304).end();
+    }
+    const data = await this.workspaceIndex.index(req.user.uid, isLazy);
+    res.setHeader('ETag', `W/"${data.revision}"`);
     return res.json(data);
+  }
+  @Get('collections/folders/:id/requests')
+  @UseGuards(JwtAuthGuard)
+  async collectionFolderRequests(
+    @Req() req: OwnerRequest,
+    @Param('id') id: string,
+    @Query('revision') revision: string,
+    @Query('cursorOrder') cursorOrder?: string,
+    @Query('cursorID') cursorID?: string,
+  ) {
+    this.owner(req);
+    return this.workspaceIndex.folderRequests(
+      req.user.uid,
+      id,
+      revision,
+      cursorOrder === undefined ? undefined : Number(cursorOrder),
+      cursorID,
+    );
+  }
+  @Get('collections/search')
+  @UseGuards(JwtAuthGuard)
+  async collectionSearch(@Req() req: OwnerRequest, @Query('q') query: string) {
+    this.owner(req);
+    return this.workspaceIndex.searchRequests(req.user.uid, query);
   }
   @Get('collections/requests/:id')
   @UseGuards(JwtAuthGuard)

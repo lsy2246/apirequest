@@ -12,7 +12,7 @@ import { HoppCollection, HoppGQLRequest, HoppRESTRequest } from "@apirequest/dat
 import { WorkspaceService } from "~/services/workspace.service";
 import { invokeAction } from "~/helpers/actions";
 import { isGQLRequest } from "~/helpers/request-type";
-import { ensureRemoteRequest, remoteRequestLocation } from "~/helpers/remote-collections";
+import { ensureRemoteRequest, ensureRemoteFolder, remoteRequestLocation, searchRemoteRequests, usesLazyRemoteCollections } from "~/helpers/remote-collections";
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
 /**
  * A spotlight searcher that searches through the user's collections
@@ -25,6 +25,7 @@ export class CollectionsSpotlightSearcherService
 {
   public static readonly ID = "COLLECTIONS_SPOTLIGHT_SEARCHER_SERVICE"
   private t = getI18n()
+  private remoteMatches = new Map<string, string>()
   public searcherID = "collections"
   public searcherSectionTitle = this.t("collection.my_collections")
   private readonly workspaceTab = this.bind(WorkspaceTabsService)
@@ -89,9 +90,8 @@ export class CollectionsSpotlightSearcherService
         name: this.t("collection.import"),
       })
     }
-    if (pageCategory === "rest") {
+    if (pageCategory === "rest" && !usesLazyRemoteCollections()) {
       this.loadRESTDocsIntoMinisearch(minisearch)
-    } else if (pageCategory === "graphql") {
     }
     const results = ref<SpotlightSearcherResult[]>([])
     const scopeHandle = effectScope()
@@ -107,7 +107,9 @@ export class CollectionsSpotlightSearcherService
       const isPersonalWorkspace = computed(
         () => this.workspaceService.currentWorkspace.value.type === "personal"
       )
-      watch(query, (query) => {
+      let searchGeneration = 0
+      watch(query, async (query) => {
+        const ticket = ++searchGeneration
         if (pageCategory === "other") {
           results.value = []
           return
@@ -136,6 +138,23 @@ export class CollectionsSpotlightSearcherService
           icon: getResultIcon(result.id),
           score: result.score,
         }))
+        if (pageCategory !== "rest" || !usesLazyRemoteCollections() || !query.trim()) return
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        if (ticket !== searchGeneration) return
+        try {
+          const matches = await searchRemoteRequests(query)
+          if (ticket !== searchGeneration) return
+          this.remoteMatches = new Map(matches.map((row) => [row.id, row.collectionID]))
+          results.value = [
+            ...results.value,
+            ...matches.slice(0, 10).map((row) => ({
+              id: `remote-${row.id}`,
+              text: { type: "text" as const, text: `${row.method ?? ""} ${row.title}`.trim() },
+              icon: markRaw(IconFolder),
+              score: 1,
+            })),
+          ]
+        } catch (error) { console.error("接口搜索失败", error) }
       })
     })
     const resultObj = computed<SpotlightSearcherSessionState>(() => ({
@@ -172,7 +191,19 @@ export class CollectionsSpotlightSearcherService
     if (result.id === "create-collection") return invokeAction("collection.new")
     if (result.id === "import-collection")
       return invokeAction(`modals.collection.import`)
-    const [type, path] = result.id.split("-")
+    let remoteLocation: { folderPath: string; requestIndex: number } | undefined
+    if (result.id.startsWith("remote-")) {
+      const id = result.id.slice("remote-".length)
+      const collectionID = this.remoteMatches.get(id)
+      if (!collectionID) return
+      try { await ensureRemoteFolder(collectionID, true) }
+      catch (error) { console.error("集合目录加载失败", error); return }
+      remoteLocation = remoteRequestLocation({ id } as HoppRESTRequest)
+      if (!remoteLocation) return
+    }
+    const [type, path] = remoteLocation
+      ? ["rest", `${remoteLocation.folderPath}/${remoteLocation.requestIndex}`]
+      : result.id.split("-")
     if (type === "rest") {
       const folderPath = path.split("/").map((x) => parseInt(x))
       let reqIndex = folderPath.pop()!

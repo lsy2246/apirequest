@@ -7,25 +7,30 @@
           'bg-accentDark': isReorderable,
         },
       ]"
-      @drop="updateRequestOrder"
-      @dragover.prevent="ordering = true"
+      @drop="!partialFolder && updateRequestOrder($event)"
+      @dragover.prevent="!partialFolder && (ordering = true)"
       @dragleave="resetDragState"
       @dragend="resetDragState"
     ></div>
     <div
-      class="group flex items-center"
-      :draggable="!hasNoTeamAccess"
-      @drop="handelDrop"
-      @dragstart="dragStart"
-      @dragover="handleDragOver($event)"
+      class="group flex items-center border-s-2"
+      :class="{
+        'border-accent collection-request-current': isActive && !saveRequest,
+        'border-transparent': !isActive || saveRequest,
+      }"
+      :aria-current="isActive && !saveRequest ? 'true' : undefined"
+      :draggable="!hasNoTeamAccess && !partialFolder"
+      @drop="!partialFolder && handelDrop($event)"
+      @dragstart="!partialFolder && dragStart($event)"
+      @dragover="!partialFolder && handleDragOver($event)"
       @dragleave="resetDragState"
       @dragend="resetDragState"
-      @contextmenu.prevent="options?.tippy?.show()"
+      @contextmenu.prevent="!partialFolder && options?.tippy?.show()"
     >
       <div class="ms-1 w-3 flex items-center justify-end">
         <component
           :is="isResponseVisible ? IconArrowDown : IconArrowRight"
-          v-if="(isCollectionRequestSummary(request) && request.__hasResponses) || (request.responses && Object.keys(request.responses).length > 0)"
+          v-if="!partialFolder && ((isCollectionRequestSummary(request) && request.__hasResponses) || (request.responses && Object.keys(request.responses).length > 0))"
           class="svg-icons w-3 cursor-pointer hover:bg-primaryDark transition rounded"
           @click="toggleRequestResponse()"
         />
@@ -61,7 +66,10 @@
         <span
           class="pointer-events-none flex min-w-0 flex-1 items-center py-2 pr-2 transition group-hover:text-secondaryDark"
         >
-          <span class="truncate" :class="{ 'text-accent': isSelected }">
+          <span class="truncate" :class="{
+            'text-accent': isSelected || (isActive && !saveRequest),
+            'font-medium': isActive && !saveRequest,
+          }">
             {{ request.name }}
           </span>
           <span
@@ -80,7 +88,7 @@
           </span>
         </span>
       </div>
-      <div class="flex">
+      <div v-if="!partialFolder" class="flex">
         <HoppButtonSecondary
           v-if="!saveRequest && !hasNoTeamAccess"
           v-tippy="{ theme: 'tooltip' }"
@@ -213,8 +221,8 @@
           'h-1 ': isLastItem,
         },
       ]"
-      @drop="handelDrop"
-      @dragover.prevent="orderingLastItem = true"
+      @drop="!partialFolder && handelDrop($event)"
+      @dragover.prevent="!partialFolder && (orderingLastItem = true)"
       @dragleave="resetDragState"
       @dragend="resetDragState"
     ></div>
@@ -288,6 +296,7 @@ const props = defineProps({
     default: () => ({}),
     required: true,
   },
+  partialFolder: { type: Boolean, default: false },
   requestID: {
     type: String,
     default: "",
@@ -521,3 +530,9 @@ const resetDragState = () => {
   orderingLastItem.value = false
 }
 </script>
+
+<style scoped>
+.collection-request-current {
+  background-color: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+</style>

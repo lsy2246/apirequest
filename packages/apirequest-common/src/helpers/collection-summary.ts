@@ -20,12 +20,21 @@ export function isCollectionRequestSummary(value: unknown): value is CollectionR
     (value as CollectionRequestSummary).__workbenchSummary === true
 }
 
+/** Missing entries cannot be treated as deleted while navigation is incomplete. */
+export function hasUnloadedCollectionRequests(collections: HoppCollection[]): boolean {
+  return collections.some((folder) =>
+    !!(folder as HoppCollection & { __workbenchUnloaded?: boolean }).__workbenchUnloaded ||
+    hasUnloadedCollectionRequests(folder.folders))
+}
+
 export function assertCollectionRequestLoaded(value: unknown): void {
   if (isCollectionRequestSummary(value))
     throw new Error("接口详情尚未加载，请重试。")
 }
 
 export function assertCollectionLoaded(collection: HoppCollection): void {
+  if ((collection as HoppCollection & { __workbenchUnloaded?: boolean }).__workbenchUnloaded)
+    throw new Error("集合目录尚未加载，请先展开集合。")
   ;(collection.requests ?? []).forEach(assertCollectionRequestLoaded)
   ;(collection.folders ?? []).forEach(assertCollectionLoaded)
 }

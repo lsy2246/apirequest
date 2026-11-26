@@ -16,8 +16,16 @@ export const pwaRegistered = ref<HoppPWARegistrationStatus>({
 })
 
 let updateApp: (reloadPage?: boolean) => Promise<void> | undefined
+let reloadRequested = false
 
 export const refreshAppForPWAUpdate = async () => {
+  reloadRequested = true
+  if (pwaNeedsRefresh.value && pwaRegistered.value.status === "INSTALLED" &&
+    !pwaRegistered.value.registration?.waiting) {
+    // The latest worker is already active. Reload only on the user's action.
+    window.location.reload()
+    return
+  }
   await updateApp?.(true)
 }
 
@@ -52,6 +60,11 @@ export default <HoppModule>{
       immediate: true,
       onNeedRefresh() {
         pwaNeedsRefresh.value = true
+      },
+      onNeedReload() {
+        // Updating the worker must not interrupt an open editor or running API.
+        if (reloadRequested) window.location.reload()
+        else pwaNeedsRefresh.value = true
       },
       onOfflineReady() {
         pwaReadyForOffline.value = true

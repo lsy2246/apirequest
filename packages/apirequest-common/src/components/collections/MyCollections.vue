@@ -28,6 +28,9 @@
           @new-folder="emit('display-modal-add')"
         />
       </div>
+      <p v-if="locateError" role="status" class="px-2 text-tiny text-secondaryLight">
+        {{ locateError }}
+      </p>
       <div
         v-if="!saveRequest || filteredCollections.length > 1"
         class="flex items-center justify-end px-2"
@@ -38,9 +41,9 @@
             :title="t('collection.locate_request')"
             :aria-label="t('collection.locate_request')"
             :icon="IconLocateFixed"
-            :disabled="!locatableRequest"
+            :disabled="!locatableRequest || locatingRequest"
             class="!px-2 !py-1"
-            @click="locateCurrentRequest"
+            @click="locateCurrentRequest(false)"
           />
           <tippy
             interactive
@@ -84,7 +87,17 @@
       </div>
     </div>
     <div ref="collectionTree" class="flex flex-1 flex-col">
-      <HoppSmartTree v-if="folderExpansionReady" :adapter="myAdapter">
+      <div v-if="usesLazyRemoteCollections() && filterText.trim()" class="flex flex-col">
+        <button v-for="match in searchMatches" :key="match.id" type="button"
+          class="truncate px-4 py-2 text-left text-secondaryLight hover:text-secondary"
+          :disabled="openingMatch === match.id"
+          @click="void openSearchMatch(match).catch(console.error)">
+          {{ openingMatch === match.id ? '加载中…' : `${match.method ?? ''} ${match.title}`.trim() }}
+        </button>
+        <span v-if="searchError" class="px-4 py-2 text-tiny text-red-400">{{ searchError }}</span>
+      </div>
+      <HoppSmartTree v-if="folderExpansionReady" :adapter="myAdapter"
+        :class="{ 'lazy-single-root-tree': lazySingleRoot }">
         <template
           #content="{ node, toggleChildren, isOpen, highlightChildren }"
         >
@@ -336,8 +349,18 @@
               }
             "
           />
+          <button
+            v-if="node.data.type === 'loadMore'"
+            type="button"
+            class="px-4 py-2 text-left text-secondaryLight hover:text-secondary"
+            :disabled="remoteFolderLoading.has(node.data.collectionID)"
+            @click="void retryRemoteFolder(node.data.collectionID).catch(console.error)"
+          >
+            {{ remoteFolderLoading.has(node.data.collectionID) ? '加载中…' : remoteFolderErrors.has(node.data.collectionID) ? '加载失败，点击重试' : '加载更多接口' }}
+          </button>
           <CollectionsRequest
-            v-if="node.data.type === 'requests'"
+            v-if="node.data.type === 'requests' && node.id !== LAZY_ROOT_ANCHOR"
+            :partial-folder="isUnloadedFolder(node.data.data.parentIndex)"
             :data-collection-request-path="`${node.data.data.parentIndex}/${pathToIndex(node.id)}`"
             :request="node.data.data.data"
             :request-i-d="`${node.data.data.parentIndex}/${pathToIndex(node.id)}`"
@@ -348,7 +371,7 @@
             :is-active="
               isActiveRequest(
                 node.data.data.parentIndex,
-                node.data.data.data._ref_id ?? node.data.data.data.id ?? '',
+                node.data.data.data,
                 pathToIndex(node.id)
               )
             "
@@ -528,6 +551,8 @@
 
 <script setup lang="ts">
 import CollectionsNewMenu from "./NewMenu.vue"
+import { matchesCollectionRequest } from "~/helpers/local-workspace/collections"
+import type { HoppTabSaveContext } from "~/helpers/tab/document"
 import IconArrowUpDown from "~icons/lucide/arrow-up-down"
 import IconChevronsDown from "~icons/lucide/chevrons-down"
 import IconChevronsUp from "~icons/lucide/chevrons-up"
@@ -536,6 +561,7 @@ import IconLocateFixed from "~icons/lucide/locate-fixed"
 import { HoppCollection, HoppRESTRequest, HoppGQLRequest, isGQLRequest } from "@apirequest/data"
 import { computed, nextTick, type ObjectDirective, PropType, ref, Ref, shallowRef, toRef, watch } from "vue"
 import { ChildrenResult, SmartTreeAdapter } from "@apirequest/ui/helpers"
+import { ensureRemoteRequestLocation, ensureRemoteFolder, isRemoteFolderLoaded, remoteFolderErrors, remoteFolderHasMore, remoteFolderLoading, retryRemoteFolder, remoteRequestLocation, searchRemoteRequests, usesLazyRemoteCollections, type RemoteCollectionIndex } from "~/helpers/remote-collections"
 import { useI18n } from "@composables/i18n"
 import { useColorMode } from "@composables/theming"
 import { useSetting } from "@composables/settings"
@@ -546,8 +572,10 @@ import { useNativeFolderExpansion } from "~/composables/nativeFolderExpansion"
 import { platform } from "~/platform"
 import { useDebounceFn, useLocalStorage } from "@vueuse/core"
 import {
+  cascadeParentCollectionForProperties,
   isRootRequestCollection,
   navigateToFolderWithIndexPath,
+  restCollectionStore,
 } from "~/newstore/collections"
 import { CurrentSortValuesService } from "~/services/current-sort.service"
 
@@ -568,6 +596,10 @@ type Folder = {
     data: HoppCollection
   }
 }
+
+const LAZY_ROOT_ANCHOR = "__lazy_root_anchor__"
+
+type LoadMore = { type: "loadMore"; collectionID: string }
 
 type Requests = {
   type: "requests"
@@ -857,13 +889,20 @@ const active = computed(() => {
   return doc && doc.type !== "test-runner" ? doc.saveContext : undefined
 })
 
-const locatableRequest = computed(() => {
+const locatableRequest = computed<HoppTabSaveContext>(() => {
   const context = active.value
-  return context &&
+  if (context &&
     context.originLocation === "user-collection" &&
-    (context.requestRefID || context.requestIndex !== undefined)
-    ? context
-    : null
+    (context.requestRefID || context.requestIndex !== undefined)) return context
+  const doc = tabs.currentActiveTab.value?.document
+  // Earlier lazy snapshots could clear saveContext. Recover only database-backed
+  // request tabs; the loader verifies their original reference before attaching.
+  if (context === undefined && doc &&
+    (doc.type === "request" || doc.type === "gql-request") && doc.request.id) {
+    return { originLocation: "user-collection" as const, folderPath: "",
+      requestRefID: doc.request._ref_id || doc.request.id }
+  }
+  return null
 })
 
 type ExpansionCommand = { open: boolean; paths?: Set<string> }
@@ -907,6 +946,8 @@ function toggleFolder(
   if (!props.saveRequest && id) {
     folderExpansion.value = { ...folderExpansion.value, [id]: !isOpen }
   }
+  if (!isOpen && id && usesLazyRemoteCollections())
+    void ensureRemoteFolder(id).catch(console.error)
   toggleChildren()
 }
 
@@ -947,14 +988,18 @@ function setTreeExpansion(open: boolean, hide: () => void) {
 }
 
 function applyTreeExpansion(
-  { command, path, savedOpen, isOpen, toggleChildren }: TreeExpansion,
+  { command, path, folderID, savedOpen, isOpen, toggleChildren }: TreeExpansion,
   identityChanged = false
 ) {
   const target =
     command && (!command.paths || command.paths.has(path))
       ? command.open
       : (savedOpen ?? (identityChanged ? false : undefined))
-  if (target !== undefined && target !== isOpen) toggleChildren()
+  if (target !== undefined && target !== isOpen) {
+    if (target && folderID && usesLazyRemoteCollections())
+      void ensureRemoteFolder(folderID).catch(console.error)
+    toggleChildren()
+  }
 }
 
 // 树按索引复用行。仅在挂载、换到另一目录或执行展开命令时恢复状态。
@@ -975,26 +1020,36 @@ const vTreeExpansion: ObjectDirective<HTMLElement, TreeExpansion> = {
 
 function findRequestPath(
   collections: HoppCollection[],
-  requestRefID: string,
+  identity: { id?: string; _ref_id?: string },
   parent = ""
 ): string | undefined {
   for (const [index, collection] of collections.entries()) {
     const path = parent ? `${parent}/${index}` : String(index)
     const requestIndex = collection.requests.findIndex(
-      (request) => (request._ref_id ?? request.id) === requestRefID
+      (request) => matchesCollectionRequest(identity, request)
     )
     if (requestIndex !== -1) return `${path}/${requestIndex}`
-    const nested = findRequestPath(collection.folders, requestRefID, path)
+    const nested = findRequestPath(collection.folders, identity, path)
     if (nested) return nested
   }
 }
 
+const currentRequestIdentity = computed(() => {
+  const doc = tabs.currentActiveTab.value?.document
+  const request = doc && doc.type !== "websocket" && "request" in doc ? doc.request : undefined
+  return {
+    id: request?.id,
+    _ref_id: locatableRequest.value?.requestRefID || request?._ref_id,
+  }
+})
+
 const currentRequestPath = computed(() => {
   const context = locatableRequest.value
-  if (!context || props.filterText) return
-  return context.requestRefID
-    ? findRequestPath(props.filteredCollections, context.requestRefID)
-    : `${context.folderPath}/${context.requestIndex}`
+  if (!context || !active.value || props.filterText) return
+  const identity = currentRequestIdentity.value
+  if (identity.id || identity._ref_id)
+    return findRequestPath(props.filteredCollections, identity)
+  return `${context.folderPath}/${context.requestIndex}`
 })
 
 function requestAncestorPaths(requestPath: string) {
@@ -1012,47 +1067,112 @@ async function revealRequest(requestPath: string, paths: string[]) {
     ?.scrollIntoView({ block: "nearest", inline: "nearest" })
 }
 
-async function locateCurrentRequest() {
-  if (!locatableRequest.value) return
+const locatingRequest = ref(false)
+const locateError = ref("")
 
-  // 搜索结果的索引可能与原目录不同，恢复完整树后用请求引用查找。
-  if (props.filterText) {
-    emit("update:filter-text", "")
-    await nextTick()
+function canRestoreFolder(folderPath: string) {
+  let folders = props.filteredCollections
+  for (const index of folderPath.split("/")) {
+    const folder = folders[Number(index)]
+    if (!folder || savedFolderExpansion(folder) === false) return false
+    folders = folder.folders
   }
-  const requestPath = currentRequestPath.value
-  if (!requestPath) return
-  await revealRequest(requestPath, requestAncestorPaths(requestPath))
+  return true
+}
+
+async function locateCurrentRequest(automatic = false) {
+  const context = locatableRequest.value
+  if (!context || locatingRequest.value || props.saveRequest) return
+  if (automatic && (!sidebarVisible.value || props.filterText)) return
+  const tabID = tabs.currentActiveTab.value?.id
+  const stillCurrent = () => tabs.currentActiveTab.value?.id === tabID &&
+    !!locatableRequest.value && sidebarVisible.value && !props.filterText
+  locatingRequest.value = true
+  locateError.value = ""
+  try {
+    // Search results use different positional paths; restore the full tree first.
+    if (props.filterText) {
+      emit("update:filter-text", "")
+      await nextTick()
+    }
+    if (!currentRequestPath.value && usesLazyRemoteCollections()) {
+      const recovering = active.value === undefined
+      const location = await ensureRemoteRequestLocation(currentRequestIdentity.value, {
+        folderPath: context.folderPath,
+        canLoad: (path) => stillCurrent() && (!automatic || canRestoreFolder(path)),
+        recoverDetached: recovering,
+      })
+      const doc = tabs.currentActiveTab.value?.document
+      if (recovering && location && stillCurrent() && doc &&
+        (doc.type === "request" || doc.type === "gql-request") && doc.saveContext === undefined) {
+        doc.saveContext = { originLocation: "user-collection", ...location,
+          requestRefID: doc.request._ref_id || doc.request.id }
+        doc.inheritedProperties = cascadeParentCollectionForProperties(
+          location.folderPath, doc.type === "request" ? "rest" : "graphql")
+      }
+      await nextTick()
+    }
+    const path = currentRequestPath.value
+    if (!path || !stillCurrent()) {
+      if (!automatic && stillCurrent()) locateError.value = "未找到当前接口，请确认接口是否已被删除。"
+      return
+    }
+    const folderPath = path.split("/").slice(0, -1).join("/")
+    // Automatic restoration respects deliberate collapses, even during loading.
+    if (automatic && !canRestoreFolder(folderPath)) return
+    // Ancestors must have their first page before SmartTree renders children.
+    // Do not advance pagination in ancestors which already have a visible page.
+    if (usesLazyRemoteCollections()) {
+      let folders = props.filteredCollections
+      const ids: string[] = []
+      for (const part of folderPath.split("/")) {
+        const folder = folders[Number(part)]
+        if (!folder) return
+        if (folder.id) ids.push(folder.id)
+        folders = folder.folders
+      }
+      for (const id of ids) {
+        if (!stillCurrent() || (automatic && !canRestoreFolder(folderPath))) return
+        if (!isRemoteFolderLoaded(id) && !remoteFolderHasMore(id))
+          await ensureRemoteFolder(id)
+      }
+      await nextTick()
+    }
+    const readyPath = currentRequestPath.value
+    if (!readyPath || !stillCurrent()) return
+    if (automatic && !canRestoreFolder(readyPath.split("/").slice(0, -1).join("/"))) return
+    await revealRequest(readyPath, requestAncestorPaths(readyPath))
+  } catch (error) {
+    console.error("定位当前接口失败", error)
+    if (stillCurrent()) locateError.value = "定位失败，请点击定位按钮重试。"
+  } finally {
+    locatingRequest.value = false
+    if (tabs.currentActiveTab.value?.id !== tabID)
+      void locateCurrentRequest(true)
+  }
 }
 
 watch(
-  [currentRequestPath, sidebarVisible],
-  ([path, visible]) => {
-    if (props.saveRequest || !visible || !path) return
-    const paths = requestAncestorPaths(path)
-    let folders = props.filteredCollections
-    for (const index of path.split("/").slice(0, -1)) {
-      const folder = folders[Number(index)]
-      // 恢复位置时尊重手动折叠；仍可用“定位当前请求”主动打开这条路径。
-      if (!folder || savedFolderExpansion(folder) === false) return
-      folders = folder.folders
-    }
-    void revealRequest(path, paths)
-  },
+  [currentRequestPath, locatableRequest, sidebarVisible,
+    () => tabs.currentActiveTab.value?.id, () => props.filteredCollections],
+  () => { void locateCurrentRequest(true) },
   { immediate: true, flush: "post" }
 )
 
 const isActiveRequest = (
   folderPath: string,
-  requestRefID: string,
+  request: Pick<HoppRESTRequest, "id" | "_ref_id">,
   requestIndex: string
 ) => {
   const context = locatableRequest.value
+  const identity = currentRequestIdentity.value
   return (
+    !props.saveRequest &&
+    !!active.value &&
     !!context &&
     context.exampleID === undefined &&
-    (context.requestRefID
-      ? context.requestRefID === requestRefID
+    (identity.id || identity._ref_id
+      ? matchesCollectionRequest(identity, request)
       : context.folderPath === folderPath &&
         context.requestIndex === Number(requestIndex))
   )
@@ -1078,7 +1198,7 @@ const selectRequest = (data: {
       requestIndex,
       isActive: isActiveRequest(
         folderPath,
-        request._ref_id ?? request.id ?? "",
+        request,
         requestIndex
       ),
     })
@@ -1170,7 +1290,12 @@ const debouncedSorting = useDebounceFn(() => {
   })
 }, 250)
 
-type MyCollectionNode = Collection | Folder | Requests
+type MyCollectionNode = Collection | Folder | Requests | LoadMore
+
+function isUnloadedFolder(path: string): boolean {
+  const folder = navigateToFolderWithIndexPath(props.filteredCollections, path.split("/").map(Number))
+  return (folder as HoppCollection & { __workbenchUnloaded?: boolean } | undefined)?.__workbenchUnloaded === true
+}
 
 class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
   constructor(
@@ -1185,10 +1310,11 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
   ): Ref<ChildrenResult<MyCollectionNode>> {
     return computed(() => {
       // 树会自动展开唯一的根节点；请求是叶子，不能把请求 ID 当作目录路径。
-      if (type === "requests") return { status: "loaded", data: [] }
+      if (type === "requests" || type === "loadMore") return { status: "loaded", data: [] }
       if (id === null) {
+        const lazy = usesLazyRemoteCollections()
         const folders = this.data.value.flatMap((item, index) =>
-          isRootRequestCollection(item)
+          (isRootRequestCollection(item) && !lazy)
             ? []
             : [
                 {
@@ -1205,7 +1331,7 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
         // 根请求直接用原树的索引，即使搜索过滤了前面的集合或请求也能修改正确的记录。
         const requests = this.allCollections.value.flatMap(
           (collection, index) => {
-            if (!isRootRequestCollection(collection)) return []
+            if (lazy || !isRootRequestCollection(collection)) return []
             return collection.requests.flatMap((request, requestIndex) => {
               const url = isGQLRequest(request) ? request.url : request.endpoint
               if (
@@ -1226,7 +1352,16 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
             })
           }
         )
-        return { status: "loaded", data: [...folders, ...requests] }
+        const nodes = [...folders, ...requests]
+        // SmartTree expands its only root automatically. An invisible second root
+        // keeps a large collection collapsed until the user opens it.
+        if (lazy && nodes.length === 1)
+          nodes.push({
+            id: LAZY_ROOT_ANCHOR,
+            data: { type: "requests", isLastItem: false,
+              data: { parentIndex: "", data: {} as HoppRESTRequest } },
+          })
+        return { status: "loaded", data: nodes }
       }
 
       const indexPath = id.split("/").map((x) => parseInt(x))
@@ -1234,7 +1369,14 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
       const item = navigateToFolderWithIndexPath(this.data.value, indexPath)
 
       if (item) {
-        const data = [
+        if (item.id && usesLazyRemoteCollections() && !isRemoteFolderLoaded(item.id)) {
+          if (remoteFolderErrors.has(item.id) && !remoteFolderHasMore(item.id))
+            return { status: "loaded", data: [] }
+          if (!remoteFolderHasMore(item.id)) {
+            return { status: "loading" }
+          }
+        }
+        const data: Array<{ id: string; data: MyCollectionNode }> = [
           ...item.folders.map((folder, index) => ({
             id: `${id}/${index}`,
             data: {
@@ -1242,7 +1384,7 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
                 item.folders && item.folders.length > 1
                   ? index === item.folders.length - 1
                   : false,
-              type: "folders",
+              type: "folders" as const,
               data: {
                 parentIndex: id,
                 data: folder,
@@ -1256,7 +1398,7 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
                 item.requests && item.requests.length > 1
                   ? index === item.requests.length - 1
                   : false,
-              type: "requests",
+              type: "requests" as const,
               data: {
                 parentIndex: id,
                 data: requests,
@@ -1265,10 +1407,12 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
           })),
         ]
 
+        if (item.id && remoteFolderHasMore(item.id))
+          data.push({ id: `${id}/more`, data: { type: "loadMore", collectionID: item.id } })
         return {
           status: "loaded",
-          data: data,
-        } as ChildrenResult<Folder | Requests>
+          data,
+        } as ChildrenResult<MyCollectionNode>
       }
       return {
         status: "loaded",
@@ -1278,9 +1422,59 @@ class MyCollectionsAdapter implements SmartTreeAdapter<MyCollectionNode> {
   }
 }
 
+const searchMatches = ref<RemoteCollectionIndex["requests"]>([])
+const openingMatch = ref<string | null>(null)
+const searchError = ref("")
+let searchGeneration = 0
+watch(() => props.filterText, async (text) => {
+  const generation = ++searchGeneration
+  searchMatches.value = []
+  searchError.value = ""
+  if (!text.trim() || !usesLazyRemoteCollections()) return
+  await new Promise((resolve) => setTimeout(resolve, 180))
+  if (generation !== searchGeneration) return
+  try {
+    const matches = await searchRemoteRequests(text)
+    if (generation === searchGeneration) searchMatches.value = matches
+  } catch (error) {
+    if (generation === searchGeneration) searchError.value = "搜索失败，请重新输入关键词"
+    console.error("接口搜索失败", error)
+  }
+})
+
+async function openSearchMatch(row: RemoteCollectionIndex["requests"][number]) {
+  if (openingMatch.value) return
+  openingMatch.value = row.id
+  searchError.value = ""
+  try {
+    let location = remoteRequestLocation({ id: row.id } as HoppRESTRequest)
+    while (!location && !isRemoteFolderLoaded(row.collectionID)) {
+      await ensureRemoteFolder(row.collectionID)
+      location = remoteRequestLocation({ id: row.id } as HoppRESTRequest)
+    }
+    if (!location) throw new Error("接口位置已变化，请重新搜索")
+    const folder = navigateToFolderWithIndexPath(restCollectionStore.value.state,
+      location.folderPath.split("/").map(Number))
+    const request = folder?.requests[location.requestIndex]
+    if (!request || request.id !== row.id) throw new Error("接口位置已变化，请重新搜索")
+    selectRequest({ request, folderPath: location.folderPath,
+      requestIndex: String(location.requestIndex) })
+  } catch (error) {
+    searchError.value = error instanceof Error ? error.message : "接口加载失败，请重试"
+  } finally { openingMatch.value = null }
+}
+
+const lazySingleRoot = computed(() =>
+  usesLazyRemoteCollections() && props.filteredCollections.length === 1)
+
 const myAdapter: SmartTreeAdapter<MyCollectionNode> = new MyCollectionsAdapter(
   refFilterCollection,
   toRef(props, "allCollections"),
   toRef(props, "filterText")
 )
 </script>
+
+<style scoped>
+/* The second root only controls SmartTree's automatic expansion. */
+:deep(.lazy-single-root-tree > div > div:last-child) { display: none; }
+</style>
