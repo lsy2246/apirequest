@@ -31,7 +31,7 @@
         v-if="errorResponse && !errorResponse.error.component"
         :src="`/images/states/${colorMode.value}/upload_error.svg`"
         :alt="errorResponse.error.message || t('error.network_fail')"
-        :heading="errorResponse.error.message || t('error.network_fail')"
+        :heading="t('ui_detail.query_failed')"
         :text="errorResponse.error.message || t('error.network_fail')"
       >
       </HoppSmartPlaceholder>
@@ -54,12 +54,12 @@
               )
             }}
           </span>
-          <span v-if="successResponse.document?.meta?.responseDuration">
+          <span v-if="successResponse.document?.meta?.responseDuration != null">
             <span class="text-secondary"> {{ t("response.time") }}: </span>
             {{ `${successResponse.document.meta.responseDuration} ms` }}
           </span>
           <span
-            v-if="successResponse.document?.meta?.responseSize"
+            v-if="successResponse.document?.meta?.responseSize != null"
             v-tippy="
               readableResponseSize
                 ? { theme: 'tooltip' }
@@ -76,6 +76,13 @@
           </span>
         </div>
       </div>
+      <HoppButtonSecondary
+        v-if="errorResponse && !isEmbed"
+        :label="t('action.retry')"
+        outline
+        class="self-center mt-3"
+        @click="invokeAction('request.send-cancel')"
+      />
     </div>
     <AppInspection
       v-if="!isLoading"
@@ -90,15 +97,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import findStatusGroup from "@helpers/findStatusGroup";
-import type { GQLResponseEvent } from "~/services/gql-tab-connection.service";
-import { useI18n } from "@composables/i18n";
-import { useColorMode } from "@composables/theming";
-import { getStatusCodeReasonPhrase } from "~/helpers/utils/statusCodes";
-import { useService } from "dioc/vue";
-import { InspectionService } from "~/services/inspection";
-import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
+import { invokeAction } from "~/helpers/actions"
+import { computed } from "vue"
+import findStatusGroup from "@helpers/findStatusGroup"
+import type { GQLResponseEvent } from "~/services/gql-tab-connection.service"
+import { useI18n } from "@composables/i18n"
+import { useColorMode } from "@composables/theming"
+import { getStatusCodeReasonPhrase } from "~/helpers/utils/statusCodes"
+import { useService } from "dioc/vue"
+import { InspectionService } from "~/services/inspection"
+import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
 
 const t = useI18n()
 const colorMode = useColorMode()

@@ -64,7 +64,7 @@
           <div class="flex shrink-0">
             <button
               type="button"
-              class="rounded p-1.5 text-secondary hover:bg-primaryLight disabled:opacity-30"
+              class="rounded p-1.5 text-secondary hover:bg-primaryLight disabled:opacity-50"
               :disabled="index === 0"
               :title="t('settings.navigation_move_up', { name: t(item.label) })"
               :aria-label="
@@ -76,7 +76,7 @@
             </button>
             <button
               type="button"
-              class="rounded p-1.5 text-secondary hover:bg-primaryLight disabled:opacity-30"
+              class="rounded p-1.5 text-secondary hover:bg-primaryLight disabled:opacity-50"
               :disabled="index === navigation.length - 1"
               :title="
                 t('settings.navigation_move_down', { name: t(item.label) })

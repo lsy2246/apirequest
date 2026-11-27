@@ -25,7 +25,11 @@
         >●
         {{
           t(
-            `workbench_capture.${active ? (state?.recording ? "recording_active" : "recording_paused") : "stopped"}`
+            initialLoading
+              ? "state.loading"
+              : !state && error
+                ? "workbench.load_failed"
+                : `workbench_capture.${active ? (state?.recording ? "recording_active" : "recording_paused") : "stopped"}`
           )
         }}</span
       >
@@ -157,6 +161,11 @@
         class="shrink-0 bg-red-500/10 px-3 py-2 text-red-500"
       >
         {{ t(`workbench_capture.${error || state?.error}`) }}
+        <HoppButtonSecondary
+          :label="t('action.retry')"
+          :loading="initialLoading"
+          @click="refreshLive"
+        />
       </p>
       <p
         v-if="archiveStatus?.dropped"
@@ -281,6 +290,31 @@
                   @filter="setColumnFilter(col, $event)"
                 />
               </div>
+              <p
+                v-if="initialLoading || pageLoading"
+                role="status"
+                aria-busy="true"
+                class="flex items-center gap-2 px-3 py-2 text-secondaryLight"
+              >
+                <HoppSmartSpinner />{{
+                  t(
+                    initialLoading
+                      ? "ui_detail.loading_capture"
+                      : "state.loading"
+                  )
+                }}
+              </p>
+              <div
+                v-if="pageError"
+                role="alert"
+                class="px-3 py-2 ui-status-error"
+              >
+                {{ t("workbench.load_failed") }}
+                <HoppButtonSecondary
+                  :label="t('action.retry')"
+                  @click="loadPage"
+                />
+              </div>
               <div
                 v-bind="containerProps"
                 class="capture-rows"
@@ -323,20 +357,36 @@
                       :key="col"
                       class="truncate pr-3"
                       :class="{
-                        'text-accent': col === 'method',
                         'text-red-500':
                           col === 'status' && (entry.status ?? 0) >= 400,
                       }"
                       :title="cellTitle(entry, col)"
+                      :style="
+                        col === 'method'
+                          ? { color: getMethodLabelColor(entry.method) }
+                          : undefined
+                      "
                       >{{ cell(entry, col) }}</span
                     >
                   </div>
                 </div>
                 <p
-                  v-if="!visibleEntries.length"
+                  v-if="
+                    !visibleEntries.length &&
+                    !initialLoading &&
+                    !pageLoading &&
+                    !pageError &&
+                    !error
+                  "
                   class="p-6 text-secondaryLight"
                 >
-                  {{ t("workbench_capture.empty") }}
+                  {{
+                    t(
+                      filterCount
+                        ? "ui_detail.no_matches"
+                        : "workbench_capture.empty"
+                    )
+                  }}
                 </p>
               </div>
             </div>
@@ -570,7 +620,24 @@
                 </template>
               </div>
             </template>
-            <p v-else class="p-3 text-secondaryLight" role="status">
+            <div
+              v-else-if="detailError"
+              class="p-3 ui-status-error"
+              role="alert"
+            >
+              <p>{{ t("ui_detail.detail_failed") }}</p>
+              <HoppButtonSecondary
+                :label="t('action.retry')"
+                outline
+                @click="select(selectedID)"
+              />
+            </div>
+            <p
+              v-else-if="detailLoading"
+              class="p-3 text-secondaryLight"
+              role="status"
+              aria-busy="true"
+            >
               {{ t("state.loading") }}
             </p>
           </section>
@@ -582,6 +649,9 @@
         @click.self="tool = undefined"
       >
         <section
+          ref="toolDialog"
+          tabindex="-1"
+          @keydown="trapDialogTab"
           role="dialog"
           aria-modal="true"
           :aria-label="toolLabels[tool]"
@@ -699,8 +769,10 @@
   </div>
 </template>
 <script setup lang="ts">
+import { trapDialogTab } from "~/helpers/ui-states"
+import { getMethodLabelColor } from "~/helpers/rest/labelColoring"
 import { useWorkbenchLiveQuery } from "~/composables/workbenchLive"
-import { computed, onBeforeUnmount, ref, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { invoke } from "@tauri-apps/api/core"
 import { onClickOutside, useStorage, useVirtualList } from "@vueuse/core"
 import { useRouter } from "vue-router"
@@ -760,6 +832,11 @@ const t = useI18n(),
   toast = useToast(),
   router = useRouter(),
   workspaceTabs = useService(WorkspaceTabsService)
+const initialLoading = ref(true),
+  pageLoading = ref(false),
+  pageError = ref(false)
+const detailLoading = ref(false),
+  detailError = ref(false)
 const state = ref<CaptureState>(),
   detail = ref<CaptureEntry>(),
   selectedID = ref("")
@@ -771,6 +848,14 @@ const toolLabels = computed(() => ({
   rules: t("workbench_capture.rules"),
   system: t("workbench_capture.system"),
 }))
+const toolDialog = ref<HTMLElement>()
+let toolTrigger: HTMLElement | undefined
+watch(tool, async (value, previous) => {
+  if (value && !previous) toolTrigger = document.activeElement as HTMLElement
+  await nextTick()
+  if (value) toolDialog.value?.focus()
+  else if (toolTrigger?.isConnected) toolTrigger.focus()
+})
 const saved = ref<CaptureArchive[]>([]),
   archiveID = ref(""),
   sessionName = ref(""),
@@ -1031,10 +1116,15 @@ async function withControl(callback: () => Promise<unknown>) {
 async function loadPage() {
   const id = storedSession.value
   if (!id) {
+    ++pageRevision
+    pageLoading.value = false
+    pageError.value = false
     page.value = { entries: [], total: 0, hosts: [], clients: [] }
     return
   }
   const current = ++pageRevision
+  pageLoading.value = true
+  pageError.value = false
   try {
     const result = await command<CapturePage>("archive_page", {
       session: id,
@@ -1050,9 +1140,11 @@ async function loadPage() {
     })
     if (current === pageRevision && id === storedSession.value)
       page.value = result
-  } catch (e) {
+  } catch {
     if (!disposed && current === pageRevision && id === storedSession.value)
-      error.value = (e as Error).message
+      pageError.value = true
+  } finally {
+    if (current === pageRevision) pageLoading.value = false
   }
 }
 watch(
@@ -1130,6 +1222,8 @@ async function refresh() {
   }
 }
 async function refreshLive() {
+  if (!state.value) initialLoading.value = true
+  error.value = ""
   try {
     if (!busy.value) {
       await refresh()
@@ -1137,6 +1231,8 @@ async function refreshLive() {
     }
   } catch (e) {
     if (!disposed) error.value = (e as Error).message
+  } finally {
+    initialLoading.value = false
   }
 }
 async function updateSettings(next: CaptureState) {
@@ -1205,6 +1301,8 @@ async function select(id: string) {
   const current = ++selectionRevision
   selectedID.value = id
   detail.value = undefined
+  detailError.value = false
+  detailLoading.value = !!id
   pane.value = "request"
   frameFilter.value = ""
   archiveFrames.value = []
@@ -1216,9 +1314,10 @@ async function select(id: string) {
     if (current !== selectionRevision) return
     detail.value = entry
     if (!entry.frames?.length && entry.frameCount) await loadFrames()
-  } catch (e) {
-    if (!disposed && current === selectionRevision)
-      error.value = (e as Error).message
+  } catch {
+    if (!disposed && current === selectionRevision) detailError.value = true
+  } finally {
+    if (current === selectionRevision) detailLoading.value = false
   }
 }
 async function openRequest() {

@@ -38,6 +38,9 @@ function mcp() {
     {} as any,
     {} as any,
     {} as any,
+    {} as any,
+    {} as any,
+    {} as any,
   );
   return {
     read: (req: any) => controller.state(req, req.res),

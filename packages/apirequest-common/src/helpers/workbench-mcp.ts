@@ -1,4 +1,5 @@
 import type { AutomationConfig } from "@apirequest/data"
+import { serviceLimitMessage } from "./service-limit-error"
 import { platform } from "~/platform"
 
 export type McpProposal = {
@@ -84,10 +85,29 @@ export async function workbenchMcpAPI<T>(
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
     throw new Error(
-      typeof data.message === "string"
-        ? data.message
-        : `HTTP ${response.status}`
+      serviceLimitMessage(response.status, data, response.headers?.get("Retry-After")) ??
+        (typeof data.message === "string" ? data.message : `HTTP ${response.status}`)
     )
   }
   return response.json()
+}
+
+/** Continue only when the server advances the offset. */
+export async function listWorkbenchConfigs<T>(
+  kind: string,
+  signal?: AbortSignal
+): Promise<T[]> {
+  const path = `configs/${encodeURIComponent(kind)}`
+  const items: T[] = []
+  let offset = 0
+  for (;;) {
+    const page = await workbenchMcpAPI<{ items: T[]; nextOffset?: number | null }>(
+      offset === 0 ? path : `${path}?offset=${offset}`, undefined, signal
+    )
+    items.push(...page.items)
+    if (page.nextOffset == null) return items
+    if (!Number.isSafeInteger(page.nextOffset) || page.nextOffset <= offset)
+      throw new Error("配置列表未返回下一页，请重试")
+    offset = page.nextOffset
+  }
 }

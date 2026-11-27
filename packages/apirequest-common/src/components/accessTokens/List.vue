@@ -5,10 +5,16 @@
 
   <div
     v-else-if="initialPageLoadHasError"
-    class="flex flex-col items-center py-4"
+    class="flex flex-col items-center gap-3 py-4"
+    role="alert"
   >
     <icon-lucide-help-circle class="mb-4 svg-icons" />
     {{ t("error.something_went_wrong") }}
+    <HoppButtonSecondary
+      :label="t('action.retry')"
+      outline
+      @click="emit('fetch-more-tokens')"
+    />
   </div>
 
   <HoppSmartPlaceholder
@@ -76,20 +82,29 @@
       <HoppSmartSpinner />
     </div>
 
-    <div v-else-if="hasError" class="flex flex-col items-center py-4">
+    <div
+      v-else-if="hasError"
+      class="flex flex-col items-center gap-3 py-4"
+      role="alert"
+    >
       <icon-lucide-help-circle class="mb-4 svg-icons" />
       {{ t("error.something_went_wrong") }}
+      <HoppButtonSecondary
+        :label="t('action.retry')"
+        outline
+        @click="emit('fetch-more-tokens')"
+      />
     </div>
   </HoppSmartIntersection>
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@composables/i18n";
-import { useColorMode } from "@composables/theming";
-import { computed } from "vue";
+import { useI18n } from "@composables/i18n"
+import { useColorMode } from "@composables/theming"
+import { computed } from "vue"
 
-import { shortDateTime } from "~/helpers/utils/date";
-import { AccessToken } from "./index.vue";
+import { shortDateTime } from "~/helpers/utils/date"
+import { AccessToken } from "./index.vue"
 
 const colorMode = useColorMode()
 const t = useI18n()

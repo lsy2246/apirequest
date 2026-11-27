@@ -1,4 +1,5 @@
 import { Body } from '@nestjs/common';
+import { CapacityRate, CapacityService } from 'src/capacity/capacity.service';
 import { AdoptLocalCollectionsDto } from './adopt-collections.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { LOCAL_WORKSPACE_UID } from './policy';
@@ -8,6 +9,7 @@ import {
   Req,
   Res,
   ForbiddenException,
+  NotAcceptableException,
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,7 +18,7 @@ import { ThrottlerBehindProxyGuard } from 'src/guards/throttler-behind-proxy.gua
 import { authCookieHandler } from '../helper';
 import { assertLocalWorkspaceRequest, getLocalWorkspaceConfig } from './policy';
 import { LocalWorkspaceService } from './local-workspace.service';
-import { relayLocalRequest } from './local-relay';
+import { RELAY_CONTENT_TYPE, relayLocalRequest } from './local-relay';
 
 @Controller({ path: 'auth', version: '1' })
 @UseGuards(ThrottlerBehindProxyGuard)
@@ -24,9 +26,11 @@ export class LocalWorkspaceController {
   constructor(
     private readonly config: ConfigService,
     private readonly workspace: LocalWorkspaceService,
+    private readonly capacity: CapacityService,
   ) {}
 
   @Post('local-session')
+  @CapacityRate('sessionRequests')
   async connect(@Req() request: Request, @Res() response: Response) {
     const config = getLocalWorkspaceConfig(this.config);
     assertLocalWorkspaceRequest(request, config);
@@ -58,6 +62,7 @@ export class LocalWorkspaceController {
       request.headers['x-workbench-local'] !== '1'
     )
       throw new ForbiddenException();
+    this.capacity.checkCollectionSize(body.collectionsJSON);
     return this.workspace.adoptCollections(
       body.collectionsJSON,
       body.collectionType,
@@ -65,6 +70,7 @@ export class LocalWorkspaceController {
   }
 
   @Post('local-relay')
+  @CapacityRate('relayRequests')
   @UseGuards(JwtAuthGuard)
   async relay(
     @Req() request: Request & { user: { uid: string } },
@@ -80,12 +86,11 @@ export class LocalWorkspaceController {
     )
       throw new ForbiddenException();
 
+    if (request.headers.accept !== RELAY_CONTENT_TYPE)
+      throw new NotAcceptableException(`Accept must be ${RELAY_CONTENT_TYPE}`);
+
     response.setHeader('Cache-Control', 'no-store');
     response.status(200);
-    return relayLocalRequest(
-      body,
-      response,
-      request.headers.accept === 'application/x-workbench-relay',
-    );
+    return relayLocalRequest(body, response, this.capacity.current);
   }
 }

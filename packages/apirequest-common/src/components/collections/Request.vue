@@ -30,7 +30,11 @@
       <div class="ms-1 w-3 flex items-center justify-end">
         <component
           :is="isResponseVisible ? IconArrowDown : IconArrowRight"
-          v-if="!partialFolder && ((isCollectionRequestSummary(request) && request.__hasResponses) || (request.responses && Object.keys(request.responses).length > 0))"
+          v-if="
+            !partialFolder &&
+            ((isCollectionRequestSummary(request) && request.__hasResponses) ||
+              (request.responses && Object.keys(request.responses).length > 0))
+          "
           class="svg-icons w-3 cursor-pointer hover:bg-primaryDark transition rounded"
           @click="toggleRequestResponse()"
         />
@@ -66,10 +70,13 @@
         <span
           class="pointer-events-none flex min-w-0 flex-1 items-center py-2 pr-2 transition group-hover:text-secondaryDark"
         >
-          <span class="truncate" :class="{
-            'text-accent': isSelected || (isActive && !saveRequest),
-            'font-medium': isActive && !saveRequest,
-          }">
+          <span
+            class="truncate"
+            :class="{
+              'text-accent': isSelected || (isActive && !saveRequest),
+              'font-medium': isActive && !saveRequest,
+            }"
+          >
             {{ request.name }}
           </span>
           <span
@@ -94,7 +101,7 @@
           v-tippy="{ theme: 'tooltip' }"
           :icon="IconRotateCCW"
           :title="t('action.restore')"
-          class="hidden group-hover:inline-flex"
+          class="hidden group-hover:inline-flex group-focus-within:inline-flex"
           @click="selectRequest()"
         />
         <span>
@@ -259,32 +266,38 @@
 </template>
 
 <script setup lang="ts">
-import IconCheckCircle from "~icons/lucide/check-circle";
-import IconMoreVertical from "~icons/lucide/more-vertical";
-import IconEdit from "~icons/lucide/edit";
-import IconCopy from "~icons/lucide/copy";
-import IconTrash2 from "~icons/lucide/trash-2";
-import IconRotateCCW from "~icons/lucide/rotate-ccw";
-import IconShare2 from "~icons/lucide/share-2";
-import IconArrowRight from "~icons/lucide/chevron-right";
-import IconArrowDown from "~icons/lucide/chevron-down";
-import IconBook from "~icons/lucide/book";
-import IconPlusCircle from "~icons/lucide/plus-circle";
-import { ref, PropType, watch, computed, nextTick } from "vue";
-import { ensureRemoteRequest, remoteRequestLoading } from "~/helpers/remote-collections";
-import { isCollectionRequestSummary } from "~/helpers/collection-summary";
-import { useToast } from "~/composables/toast";
-import { HoppRESTRequest, HoppGQLRequest } from "@apirequest/data";
-import { isGQLRequest } from "@apirequest/data";
-import IconGraphql from "~icons/hopp/graphql";
-import { useI18n } from "@composables/i18n";
-import { useDocumentationVisibility } from "~/composables/documentationVisibility";
-import { TippyComponent } from "vue-tippy";
-import { changeCurrentReorderStatus, currentReorderingStatus$ } from "~/newstore/reordering";
-import { useReadonlyStream } from "~/composables/stream";
-import { getMethodLabelColorClassOf } from "~/helpers/rest/labelColoring";
-import { platform } from "~/platform";
-import { invokeAction } from "~/helpers/actions";
+import IconCheckCircle from "~icons/lucide/check-circle"
+import IconMoreVertical from "~icons/lucide/more-vertical"
+import IconEdit from "~icons/lucide/edit"
+import IconCopy from "~icons/lucide/copy"
+import IconTrash2 from "~icons/lucide/trash-2"
+import IconRotateCCW from "~icons/lucide/rotate-ccw"
+import IconShare2 from "~icons/lucide/share-2"
+import IconArrowRight from "~icons/lucide/chevron-right"
+import IconArrowDown from "~icons/lucide/chevron-down"
+import IconBook from "~icons/lucide/book"
+import IconPlusCircle from "~icons/lucide/plus-circle"
+import { ref, PropType, watch, computed, nextTick } from "vue"
+import {
+  ensureRemoteRequest,
+  remoteRequestLoading,
+} from "~/helpers/remote-collections"
+import { isCollectionRequestSummary } from "~/helpers/collection-summary"
+import { useToast } from "~/composables/toast"
+import { HoppRESTRequest, HoppGQLRequest } from "@apirequest/data"
+import { isGQLRequest } from "@apirequest/data"
+import IconGraphql from "~icons/hopp/graphql"
+import { useI18n } from "@composables/i18n"
+import { useDocumentationVisibility } from "~/composables/documentationVisibility"
+import { TippyComponent } from "vue-tippy"
+import {
+  changeCurrentReorderStatus,
+  currentReorderingStatus$,
+} from "~/newstore/reordering"
+import { useReadonlyStream } from "~/composables/stream"
+import { getMethodLabelColorClassOf } from "~/helpers/rest/labelColoring"
+import { platform } from "~/platform"
+import { invokeAction } from "~/helpers/actions"
 
 type CollectionType = "my-collections" | "team-collections"
 
@@ -504,7 +517,8 @@ const updateLastItemOrder = (e: DragEvent) => {
 }
 
 const isRequestLoading = computed(() => {
-  if (props.request.id && remoteRequestLoading.has(props.request.id)) return true
+  if (props.request.id && remoteRequestLoading.has(props.request.id))
+    return true
   if (props.requestMoveLoading.length > 0 && props.requestID) {
     return props.requestMoveLoading.includes(props.requestID)
   }

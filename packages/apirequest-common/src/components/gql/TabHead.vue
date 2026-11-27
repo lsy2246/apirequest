@@ -113,19 +113,22 @@
 </template>
 
 <script setup lang="ts">
-import { platform } from "~/platform";
-import { computed, ref } from "vue";
-import { TippyComponent } from "vue-tippy";
-import { LATEST_RESPONSE_NAME } from "~/helpers/tab/saved-response";
-import { useI18n } from "~/composables/i18n";
-import IconGraphql from "~icons/hopp/graphql";
-import IconXCircle from "~icons/lucide/x-circle";
-import IconXSquare from "~icons/lucide/x-square";
-import IconFileEdit from "~icons/lucide/file-edit";
-import IconCopy from "~icons/lucide/copy";
-import IconShare2 from "~icons/lucide/share-2";
-import { HoppTab } from "~/services/tab";
-import { HoppGQLRequestDocument, HoppSavedGQLExampleDocument } from "~/helpers/tab/document";
+import { platform } from "~/platform"
+import { computed, ref } from "vue"
+import { TippyComponent } from "vue-tippy"
+import { LATEST_RESPONSE_NAME } from "~/helpers/tab/saved-response"
+import { useI18n } from "~/composables/i18n"
+import IconGraphql from "~icons/hopp/graphql"
+import IconXCircle from "~icons/lucide/x-circle"
+import IconXSquare from "~icons/lucide/x-square"
+import IconFileEdit from "~icons/lucide/file-edit"
+import IconCopy from "~icons/lucide/copy"
+import IconShare2 from "~icons/lucide/share-2"
+import { HoppTab } from "~/services/tab"
+import {
+  HoppGQLRequestDocument,
+  HoppSavedGQLExampleDocument,
+} from "~/helpers/tab/document"
 
 const t = useI18n()
 
@@ -143,12 +146,15 @@ const tabName = computed(() => {
     const name = props.tab.document.response?.name
     return name === LATEST_RESPONSE_NAME
       ? t("response.latest")
-      : (name ?? "Untitled")
+      : name || t("ui_detail.untitled")
   }
   if (props.tab.document.type === "gql-request") {
-    return props.tab.document.request?.name ?? "Untitled"
+    return !props.tab.document.saveContext &&
+      props.tab.document.request?.name === "Untitled"
+      ? t("ui_detail.untitled")
+      : props.tab.document.request?.name || t("ui_detail.untitled")
   }
-  return "Untitled"
+  return t("ui_detail.untitled")
 })
 
 const emit = defineEmits<{

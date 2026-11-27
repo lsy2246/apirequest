@@ -122,7 +122,7 @@ export default defineConfig({
       // TODO: Maybe leave ~ only for individual apps and not use on common
       // Common package aliases
       "~": path.resolve(__dirname, "../apirequest-common/src"),
-      "@apirequest/common": "@apirequest/common/src",
+      "@apirequest/common": path.resolve(__dirname, "../apirequest-common/src"),
 
       // Common (shared) modules (legacy - TODO: migrate these to @common/*)
       "@composables": path.resolve(

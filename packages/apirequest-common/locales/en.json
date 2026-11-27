@@ -1453,8 +1453,7 @@
     "url_placeholder": "Enter a URL or paste a cURL command",
     "variables": "Variables",
     "view_my_links": "View my links",
-    "generate_name_error": "Failed to generate request name.",
-    "untitled": "Untitled"
+    "generate_name_error": "Failed to generate request name."
   },
   "response": {
     "latest": "Latest response",
@@ -2857,6 +2856,7 @@
     "refresh_failed": "Refresh failed. Previously loaded content is still shown."
   },
   "history_results": {
+    "body_missing": "The saved response body is unavailable.",
     "automatic": "Automatic cleanup",
     "cleaned": "The response result has been cleaned up.",
     "cleaned_report": "Cleaned {count} results ({size}).",
@@ -3425,5 +3425,26 @@
     "disabled": "History is off. Use the switch above to enable it.",
     "load_failed": "Could not load history",
     "load_failed_description": "Check your connection and retry. Existing records are kept."
+  },
+  "ui_detail": {
+    "untitled": "Untitled request",
+    "query_failed": "Query failed",
+    "connect_first": "Connect to WebSocket first",
+    "message_first": "Enter a message to send",
+    "variable_name": "Variable",
+    "initial_value": "Initial value",
+    "current_value": "Current value",
+    "description_placeholder": "Add a description…",
+    "authorizing": "Completing authorization…",
+    "no_matches": "No matching records. Adjust or clear your filters.",
+    "loading_capture": "Loading capture status…",
+    "loading_result": "Loading response…",
+    "detail_failed": "Could not load this record. Please try again.",
+    "save_failed": "Could not save. Your changes are preserved; please try again.",
+    "plan_summary": "{iterations} iterations · {delay} ms delay",
+    "enabling": "Generating connection configuration…",
+    "disabling": "Disabling…",
+    "publishing": "Publishing…",
+    "unpublishing": "Unpublishing…"
   }
 }

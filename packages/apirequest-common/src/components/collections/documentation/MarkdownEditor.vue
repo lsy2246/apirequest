@@ -13,7 +13,7 @@
         class="text-wrap w-full p-4 rounded-sm text-sm font-mono text-secondary outline-none resize-none focus:border focus:border-accent focus:bg-primaryLight transition placeholder:text-secondaryLight"
         :style="{ height: textareaHeight + 'px' }"
         spellcheck="false"
-        :placeholder="placeholder"
+        :placeholder="placeholder || t('ui_detail.description_placeholder')"
         @blur="handleBlur"
         @click.stop
         @input="adjustTextareaHeight"
@@ -39,10 +39,10 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch, nextTick, onMounted } from "vue";
-import MarkdownIt from "markdown-it";
-import DOMPurify from "dompurify";
-import { useI18n } from "~/composables/i18n";
+import { ref, computed, watch, nextTick, onMounted } from "vue"
+import MarkdownIt from "markdown-it"
+import DOMPurify from "dompurify"
+import { useI18n } from "~/composables/i18n"
 
 const t = useI18n()
 
@@ -54,7 +54,7 @@ const props = withDefaults(
   }>(),
   {
     modelValue: "",
-    placeholder: "Add description here...",
+    placeholder: "",
     readOnly: false,
   }
 )

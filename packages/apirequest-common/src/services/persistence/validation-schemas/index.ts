@@ -663,6 +663,9 @@ export const WORKSPACE_TABS_STATE_SCHEMA = z
             saveContext: z.optional(HoppTabSaveContextSchema),
             response: z.optional(z.nullable(HoppRESTResponseSchema)),
             testResults: z.optional(z.nullable(HoppTestResultSchema)),
+            requestModePreference: z
+              .optional(z.enum(["debug", "design", "documentation", "cases", "load", "settings"]))
+              .catch(undefined),
             responseTabPreference: z.optional(z.string()),
             optionTabPreference: z.optional(z.enum(validRestOperations)).catch(undefined),
             inheritedProperties: z.optional(HoppInheritedPropertySchema),

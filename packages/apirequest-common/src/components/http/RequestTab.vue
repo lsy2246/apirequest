@@ -1,69 +1,83 @@
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
-    <WorkbenchRequestModes v-model="mode" />
-    <HttpRequest v-model="tab" />
-    <WorkbenchRequestDesign
-      v-if="mode === 'design'"
-      v-model="tab.document.request"
-      :inherited="tab.document.inheritedProperties"
-      :envs="resolvedEnvs"
-      class="overflow-auto"
+    <WorkbenchRequestModes
+      v-model="mode"
+      :id-prefix="`request-mode-${tab.id}`"
     />
-    <WorkbenchRequestDocumentation
-      v-else-if="mode === 'documentation' && isDocumentationVisible"
-      :key="tab.id"
-      v-model="tab.document.request"
-      :inherited="tab.document.inheritedProperties"
-      :environment-variables="envs"
-      @debug="mode = 'debug'"
-    />
-    <WorkbenchRequestCases
-      v-else-if="mode === 'cases'"
-      :key="tab.id"
-      :request="tab.document.request"
-      :request-id="
-        tab.document.saveContext && !tab.document.saveContext.exampleID
-          ? (tab.document.request._ref_id ?? tab.document.request.id)
-          : undefined
-      "
-      :inherited="tab.document.inheritedProperties"
-      class="overflow-auto"
-    />
-    <div v-else-if="mode === 'load'" class="min-h-0 overflow-auto">
-      <WorkbenchLoadTestPanel
-        :request="tab.document.request"
+    <div
+      :id="`request-mode-${tab.id}-panel`"
+      role="tabpanel"
+      :aria-labelledby="`request-mode-${tab.id}-${mode}`"
+      class="flex min-h-0 flex-1 flex-col"
+    >
+      <HttpRequest v-model="tab" />
+      <WorkbenchRequestDesign
+        v-if="mode === 'design'"
+        v-model="tab.document.request"
         :inherited="tab.document.inheritedProperties"
+        :envs="resolvedEnvs"
+        class="overflow-auto"
       />
-      <WorkbenchReports kind="load" class="mx-5 mb-5" />
+      <WorkbenchRequestDocumentation
+        v-else-if="mode === 'documentation' && isDocumentationVisible"
+        :key="tab.id"
+        v-model="tab.document.request"
+        :inherited="tab.document.inheritedProperties"
+        :environment-variables="envs"
+        @debug="mode = 'debug'"
+      />
+      <WorkbenchRequestCases
+        v-else-if="mode === 'cases'"
+        :key="tab.id"
+        :request="tab.document.request"
+        :request-id="
+          tab.document.saveContext && !tab.document.saveContext.exampleID
+            ? (tab.document.request._ref_id ?? tab.document.request.id)
+            : undefined
+        "
+        :inherited="tab.document.inheritedProperties"
+        class="overflow-auto"
+      />
+      <div v-else-if="mode === 'load'" class="min-h-0 overflow-auto">
+        <WorkbenchLoadTestPanel
+          :request="tab.document.request"
+          :inherited="tab.document.inheritedProperties"
+        />
+        <WorkbenchReports kind="load" class="mx-5 mb-5" />
+      </div>
+      <WorkbenchRequestSettings
+        v-else-if="mode === 'settings'"
+        v-model="tab.document.request"
+        class="min-h-0 flex-1 overflow-auto"
+      />
+      <AppPaneLayout
+        v-else
+        layout-id="rest-primary"
+        class="request-detail-panes"
+      >
+        <template #primary>
+          <HttpRequestOptions
+            v-model="tab.document.request"
+            v-model:option-tab="tab.document.optionTabPreference!"
+            v-model:inherited-properties="tab.document.inheritedProperties"
+            sync-query
+            :envs="resolvedEnvs"
+          />
+        </template>
+        <template #secondary>
+          <HttpResponse
+            v-model:document="tab.document"
+            :tab-id="tab.id"
+            :is-embed="false"
+          />
+        </template>
+      </AppPaneLayout>
     </div>
-    <WorkbenchRequestSettings
-      v-else-if="mode === 'settings'"
-      v-model="tab.document.request"
-      class="min-h-0 flex-1 overflow-auto"
-    />
-    <AppPaneLayout v-else layout-id="rest-primary" class="request-detail-panes">
-      <template #primary>
-        <HttpRequestOptions
-          v-model="tab.document.request"
-          v-model:option-tab="tab.document.optionTabPreference!"
-          v-model:inherited-properties="tab.document.inheritedProperties"
-          sync-query
-          :envs="resolvedEnvs"
-        />
-      </template>
-      <template #secondary>
-        <HttpResponse
-          v-model:document="tab.document"
-          :tab-id="tab.id"
-          :is-embed="false"
-        />
-      </template>
-    </AppPaneLayout>
   </div>
 </template>
 
 <script setup lang="ts">
-import { watch, computed, ref } from "vue"
+import { watch, computed } from "vue"
 import WorkbenchReports from "~/components/workbench/Reports.vue"
 import WorkbenchRequestCases from "~/components/workbench/RequestCases.vue"
 import type { RequestMode } from "~/components/workbench/RequestModes.vue"
@@ -87,11 +101,20 @@ const emit = defineEmits<{
 }>()
 
 const tab = useVModel(props, "modelValue", emit)
-const mode = ref<RequestMode>("debug")
-const { isDocumentationVisible } = useDocumentationVisibility()
-watch(isDocumentationVisible, (visible) => {
-  if (!visible && mode.value === "documentation") mode.value = "debug"
+const mode = computed<RequestMode>({
+  get: () => tab.value.document.requestModePreference ?? "debug",
+  set: (value) => {
+    tab.value.document.requestModePreference = value
+  },
 })
+const { isDocumentationVisible } = useDocumentationVisibility()
+watch(
+  [isDocumentationVisible, () => tab.value.id],
+  ([visible]) => {
+    if (!visible && mode.value === "documentation") mode.value = "debug"
+  },
+  { immediate: true }
+)
 
 const envs = useReadonlyStream(
   aggregateEnvsWithCurrentValue$,

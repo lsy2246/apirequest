@@ -114,7 +114,7 @@
             :icon="IconTrash"
             color="red"
             :title="t('action.remove')"
-            class="hidden group-hover:inline-flex"
+            class="hidden group-hover:inline-flex group-focus-within:inline-flex"
             @click="deleteBatchHistoryEntry(filteredHistoryGroup)"
           />
         </summary>
@@ -158,7 +158,8 @@
         !loadingPage &&
         !pageError &&
         !hasErrorFetchingHistoryStoreStatus &&
-        history.length === 0
+        history.length === 0 &&
+        !hasFilters
       "
       :title="t('empty.history')"
     />
@@ -168,7 +169,8 @@
         !loadingPage &&
         !pageError &&
         !hasErrorFetchingHistoryStoreStatus &&
-        history.length > 0 &&
+        isHistoryStoreEnabled &&
+        (history.length > 0 || hasFilters) &&
         filteredHistory.length === 0
       "
       :title="`${t('state.nothing_found')} ‟${filterText || filterSelection}”`"
@@ -221,6 +223,8 @@
 </template>
 
 <script setup lang="ts">
+import { relativeTime } from "~/helpers/ui-states"
+import { useFullI18n } from "~/composables/i18n"
 import { toRaw } from "vue"
 import { refreshWebHistory } from "~/helpers/refresh-history"
 import WorkbenchState from "~/components/workbench/State.vue"
@@ -244,7 +248,7 @@ import {
   HoppRESTRequest,
   makeGQLRequest,
 } from "@apirequest/data"
-import { useTimeAgo, watchDebounced } from "@vueuse/core"
+import { useNow, watchDebounced } from "@vueuse/core"
 import { combineLatest, map } from "rxjs"
 import * as A from "fp-ts/Array"
 import { pipe } from "fp-ts/function"
@@ -284,8 +288,13 @@ type TimedHistoryEntry = {
 
 const toast = useToast()
 const t = useI18n()
+const { locale } = useFullI18n()
+const now = useNow({ interval: 60000 })
 
 const filterText = ref("")
+const hasFilters = computed(
+  () => !!filterText.value.trim() || filterSelection.value !== "ALL"
+)
 const showMore = ref(false)
 const confirmRemove = ref(false)
 const selectedResultId = ref<string>()
@@ -348,7 +357,9 @@ const filteredHistory = computed(() =>
     ),
     A.map((entry): TimedHistoryEntry => ({
       entry,
-      timeAgo: useTimeAgo(entry.updatedOn),
+      timeAgo: computed(() =>
+        relativeTime(entry.updatedOn, now.value, locale.value)
+      ),
     }))
   )
 )

@@ -19,7 +19,9 @@
     <div
       class="flex items-center gap-3 overflow-hidden rounded border border-divider bg-primaryLight px-4 py-3"
     >
-      <strong class="text-green-600">{{ request.method }}</strong>
+      <strong :style="{ color: getMethodLabelColor(request.method) }">{{
+        request.method
+      }}</strong>
       <span class="truncate font-mono text-tiny text-secondaryDark">{{
         request.endpoint
       }}</span>
@@ -30,7 +32,7 @@
         <span class="relative block">
           <select
             v-model="config.mode"
-            class="h-9 w-full cursor-pointer appearance-none rounded border border-divider bg-primary px-3 pr-8 text-secondaryDark hover:border-dividerDark focus-visible:border-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            class="h-9 w-full cursor-pointer appearance-none rounded border border-divider bg-primary px-3 pr-8 text-secondaryDark hover:border-dividerDark focus-visible:border-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="running"
           >
             <option value="requests">{{ t("workbench.by_requests") }}</option>
@@ -147,7 +149,7 @@
             v-for="(count, status) in report.statuses"
             :key="status"
             class="rounded bg-primaryLight px-3 py-1 text-tiny"
-            >{{ status }}: {{ count }}</span
+            >{{ loadStatusLabel(status) }}: {{ count }}</span
           >
         </div>
       </div>
@@ -179,20 +181,36 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, shallowRef } from "vue";
-import { useService } from "dioc/vue";
-import type { HoppRESTRequest } from "@apirequest/data";
-import { cloneDeep } from "lodash-es";
-import { useI18n } from "~/composables/i18n";
-import { downloadWorkbenchReport, useWorkbenchReports } from "~/composables/workbenchReports";
-import { KernelInterceptorService } from "~/services/kernel-interceptor.service";
-import type { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties";
-import { LOAD_TEST_LIMITS, LoadTestRunner, validateLoadTestConfig, type LoadTestConfig, type LoadTestReport } from "~/helpers/load-test/runner";
-import { prepareLoadTest } from "~/helpers/load-test/prepare";
-import IconChevronDown from "~icons/lucide/chevron-down";
-import IconPlay from "~icons/lucide/play";
-import IconSquare from "~icons/lucide/square";
-import IconDownload from "~icons/lucide/download";
+import { getMethodLabelColor } from "~/helpers/rest/labelColoring"
+import { computed, onBeforeUnmount, reactive, ref, shallowRef } from "vue"
+import { useService } from "dioc/vue"
+import type { HoppRESTRequest } from "@apirequest/data"
+import { cloneDeep } from "lodash-es"
+import { useI18n } from "~/composables/i18n"
+import {
+  downloadWorkbenchReport,
+  useWorkbenchReports,
+} from "~/composables/workbenchReports"
+import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
+import type { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties"
+import {
+  LOAD_TEST_LIMITS,
+  LoadTestRunner,
+  validateLoadTestConfig,
+  type LoadTestConfig,
+  type LoadTestReport,
+} from "~/helpers/load-test/runner"
+import { prepareLoadTest } from "~/helpers/load-test/prepare"
+import IconChevronDown from "~icons/lucide/chevron-down"
+import IconPlay from "~icons/lucide/play"
+import IconSquare from "~icons/lucide/square"
+import IconDownload from "~icons/lucide/download"
+function loadStatusLabel(status: string) {
+  if (status === "workbench-429") return "工作台频率超限 (429)"
+  if (status === "workbench-503") return "工作台转发不可用 (503)"
+  return status
+}
+
 const props = defineProps<{
   request: HoppRESTRequest
   inherited?: HoppInheritedProperty

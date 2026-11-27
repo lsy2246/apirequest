@@ -63,7 +63,7 @@ afterEach(() => {
   else Reflect.deleteProperty(navigator, "clipboard")
 })
 
-async function mount() {
+async function mount(enable = true) {
   target = document.createElement("div")
   app = createApp(AIAccess)
   for (const name of ["HoppButtonPrimary", "HoppButtonSecondary"])
@@ -80,8 +80,10 @@ async function mount() {
   app.mount(target)
   await mocks.refresh!()
   await nextTick()
-  button("workbench_mcp.enable").click()
-  await vi.waitFor(() => expect(target.textContent).toContain("action.copy"))
+  if (enable) {
+    button("workbench_mcp.enable").click()
+    await vi.waitFor(() => expect(target.textContent).toContain("action.copy"))
+  }
 }
 function button(label: string) {
   return Array.from(target.querySelectorAll("button")).find(
@@ -120,5 +122,20 @@ describe("MCP connection copy", () => {
     })
     expect(mocks.success).not.toHaveBeenCalled()
     expect(button("action.copy").disabled).toBe(false)
+  })
+})
+
+describe("MCP access error recovery", () => {
+  it("releases loading after an enable failure and allows retry", async () => {
+    await mount(false)
+    mocks.api.mockRejectedValueOnce(new Error("Access service unavailable"))
+    button("workbench_mcp.enable").click()
+    await vi.waitFor(() =>
+      expect(target.textContent).toContain("Access service unavailable")
+    )
+    expect(button("workbench_mcp.enable").disabled).toBe(false)
+    button("workbench_mcp.enable").click()
+    await vi.waitFor(() => expect(target.textContent).toContain("action.copy"))
+    expect(target.textContent).not.toContain("Access service unavailable")
   })
 })

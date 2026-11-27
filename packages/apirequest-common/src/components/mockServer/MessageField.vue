@@ -10,7 +10,7 @@
       <option value="binary">{{ t("mock_tools.binary_message") }}</option>
     </select>
     <textarea
-      :value="binary ? (model as { data: string }).data : model"
+      :value="messageText"
       :aria-label="label"
       :placeholder="binary ? 'AAEC/w==' : ''"
       rows="2"
@@ -27,6 +27,9 @@ const model = defineModel<MockMessage>({ required: true })
 defineProps<{ label: string }>()
 const t = useI18n(),
   binary = computed(() => typeof model.value !== "string")
+const messageText = computed(() =>
+  typeof model.value === "string" ? model.value : model.value.data
+)
 function change(value: string) {
   model.value = binary.value ? { type: "binary", data: value } : value
 }

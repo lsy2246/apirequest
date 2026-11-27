@@ -1,4 +1,5 @@
 import axios from "axios"
+import { serviceLimitMessage } from "./service-limit-error"
 import { HoppCollection, HoppGQLRequest, HoppRESTRequest, makeCollection } from "@apirequest/data"
 import { reactive } from "vue"
 import { platform } from "~/platform"
@@ -12,6 +13,7 @@ export type RemoteCollectionIndex = {
   schemaVersion: 1
   revision: string
   lazyRequests?: boolean
+  detailBatchSize?: number
   loadedFolders?: string[]
   pageCursors?: Record<string, { orderIndex: number; id: string }>
   collections: { id: string; parentID: string | null; title: string; type: string; data: unknown; orderIndex: number; updatedOn: string }[]
@@ -23,6 +25,32 @@ type CachedDetail = { revision: string; request: Request }
 const loaded = new Map<string, CachedDetail>()
 const pending = new Map<string, Promise<Request>>()
 const pendingFolders = new Map<string, Promise<void>>()
+// Restoring a large saved expansion can mount hundreds of folders at once.
+// Space directory reads so they do not exhaust the server's per-IP quota.
+const folderRequestIntervalMs = 250
+let folderRequestQueue: Promise<void> = Promise.resolve()
+let nextFolderRequestAt = 0
+let folderCooldownUntil = 0
+
+function reserveFolderRequest(signal?: AbortSignal): Promise<void> {
+  const slot = folderRequestQueue.then(async () => {
+    signal?.throwIfAborted()
+    const delay = Math.max(0, nextFolderRequestAt - Date.now(), folderCooldownUntil - Date.now())
+    if (delay) await new Promise<void>((resolve) => setTimeout(resolve, delay))
+    signal?.throwIfAborted()
+    nextFolderRequestAt = Date.now() + folderRequestIntervalMs
+  })
+  folderRequestQueue = slot.catch(() => {})
+  return slot
+}
+
+function throttleCooldown(value: unknown): number {
+  const header = Array.isArray(value) ? value[0] : value
+  if (typeof header !== "string" && typeof header !== "number") return 10_000
+  const seconds = Number(header)
+  const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(String(header)) - Date.now()
+  return Number.isFinite(delay) ? Math.max(1_000, Math.min(120_000, delay)) : 10_000
+}
 export const remoteFolderLoading = reactive(new Set<string>())
 export const remoteFolderErrors = reactive(new Map<string, string>())
 export const remoteRequestLoading = reactive(new Set<string>())
@@ -31,6 +59,12 @@ let requestIndex = new Map<string, RemoteCollectionIndex["requests"][number]>()
 let loadedFolderIDs = new Set<string>()
 let requestPaths = new Map<string, { folderPath: number[]; requestIndex: number }>()
 let refresh: Promise<void> | undefined
+let detailBatchSize = 200
+
+export function setDetailBatchSize(value: unknown) {
+  const size = Number(value)
+  if (Number.isSafeInteger(size) && size > 0) detailBatchSize = size
+}
 let generation = 0
 let persistenceStarted = false
 let recoveredPending: HoppCollection[] = []
@@ -99,6 +133,7 @@ function install(snapshot: RemoteCollectionIndex) {
   recoveredPending = []
   if (index?.revision !== snapshot.revision) remoteFolderErrors.clear()
   index = snapshot
+  setDetailBatchSize(snapshot.detailBatchSize)
   loadedFolderIDs = new Set(snapshot.loadedFolders ?? [])
   requestIndex = new Map(snapshot.requests.map((row) => [row.id, row]))
   const paths = new Map<string, { folderPath: number[]; requestIndex: number }>()
@@ -127,6 +162,7 @@ export async function refreshRemoteCollectionIndex(): Promise<void> {
       headers: { ...headers, ...(index ? { "If-None-Match": `W/"${index.revision}"` } : {}) },
       validateStatus: (status) => status === 200 || status === 304,
     })
+    setDetailBatchSize(response.headers?.["x-workbench-detail-batch-size"])
     if (response.status === 304 || ticket !== generation || response.data.revision === index?.revision) return
     install(response.data)
     void writeCollectionCache("index", "workspace", response.data)
@@ -173,16 +209,18 @@ export function remoteFolderHasMore(id: string) {
 }
 
 /** One page for navigation; explicit export/run can request the complete folder. */
-export function ensureRemoteFolder(id: string, all = false): Promise<void> {
+export function ensureRemoteFolder(id: string, all = false, signal?: AbortSignal): Promise<void> {
   if (!index?.lazyRequests || isRemoteFolderLoaded(id)) return Promise.resolve()
   const running = pendingFolders.get(id)
-  if (running) return all ? running.then(() => ensureRemoteFolder(id, true)) : running
+  if (running) return all ? running.then(() => ensureRemoteFolder(id, true, signal)) : running
   const task = (async () => {
     remoteFolderLoading.add(id)
     remoteFolderErrors.delete(id)
+    let limited = false
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         if (refresh) await refresh
+        await reserveFolderRequest(signal)
         const current: RemoteCollectionIndex | undefined = index
         if (!current?.lazyRequests || loadedFolderIDs.has(id)) return
         const cursor = current.pageCursors?.[id]
@@ -190,7 +228,7 @@ export function ensureRemoteFolder(id: string, all = false): Promise<void> {
           nextCursor: { orderIndex: number; id: string } | null } }
         try {
           result = await axios.get(`${base()}/folders/${encodeURIComponent(id)}/requests`, {
-            headers, withCredentials: true,
+            headers, withCredentials: true, signal,
             params: { revision: current.revision,
               ...(cursor ? { cursorOrder: cursor.orderIndex, cursorID: cursor.id } : {}) },
           })
@@ -198,6 +236,12 @@ export function ensureRemoteFolder(id: string, all = false): Promise<void> {
         } catch (error) {
           if (axios.isAxiosError(error) && error.response?.status === 409) {
             await refreshRemoteCollectionIndex()
+            continue
+          }
+          if (axios.isAxiosError(error) && error.response?.status === 429) {
+            limited = true
+            folderCooldownUntil = Math.max(folderCooldownUntil, Date.now() +
+              throttleCooldown(error.response.headers?.["retry-after"]))
             continue
           }
           throw error
@@ -223,14 +267,21 @@ export function ensureRemoteFolder(id: string, all = false): Promise<void> {
         void writeCollectionCache("index", "workspace", next)
         return
       }
+      if (limited && folderCooldownUntil > Date.now()) {
+        throw new Error(serviceLimitMessage(429, {
+          group: "workspaceReads",
+          retryAfter: (folderCooldownUntil - Date.now()) / 1000,
+        }))
+      }
       throw new Error("目录正在更新，请重试")
     } catch (error) {
-      remoteFolderErrors.set(id, error instanceof Error ? error.message : "集合目录加载失败")
+      if (!signal?.aborted)
+        remoteFolderErrors.set(id, error instanceof Error ? error.message : "集合目录加载失败")
       throw error
     } finally { remoteFolderLoading.delete(id) }
   })().finally(() => pendingFolders.delete(id))
   pendingFolders.set(id, task)
-  return all ? task.then(() => ensureRemoteFolder(id, true)) : task
+  return all ? task.then(() => ensureRemoteFolder(id, true, signal)) : task
 }
 
 export async function searchRemoteRequests(text: string) {
@@ -437,7 +488,8 @@ export async function ensureRemoteCollection(collection: HoppCollection): Promis
   }
   const requests: Request[] = []
   const visit = (folder: HoppCollection) => {
-    requests.push(...folder.requests.filter(isCollectionRequestSummary))
+    for (const request of folder.requests)
+      if (isCollectionRequestSummary(request)) requests.push(request)
     folder.folders.forEach(visit)
   }
   visit(collection)
@@ -446,10 +498,16 @@ export async function ensureRemoteCollection(collection: HoppCollection): Promis
   ids.forEach((id) => remoteRequestLoading.add(id))
   try {
     const rows: Detail[] = []
-    for (let start = 0; start < ids.length; start += 200) {
+    const batchSize = detailBatchSize
+    for (let start = 0; start < ids.length; start += batchSize) {
       const response = await axios.post<Detail[]>(`${base()}/requests/batch`,
-        { ids: ids.slice(start, start + 200) }, { headers, withCredentials: true })
-      rows.push(...response.data)
+        { ids: ids.slice(start, start + batchSize) }, { headers, withCredentials: true })
+        .catch((error: unknown) => {
+          if (axios.isAxiosError(error) && error.response?.status === 429)
+            throw new Error(serviceLimitMessage(429, error.response.data, error.response.headers?.["retry-after"]))
+          throw error
+        })
+      for (const row of response.data) rows.push(row)
     }
     const details = new Map(rows.map((row) => [row.id, parseDetail(row)]))
     if (details.size !== ids.length || ids.some((id) => !details.has(id))) throw new Error("集合详情未完整加载")
@@ -468,7 +526,7 @@ export async function ensureRemoteCollection(collection: HoppCollection): Promis
   } finally { ids.forEach((id) => remoteRequestLoading.delete(id)) }
 }
 
-export async function ensureAllRemoteCollections() {
+export async function ensureAllRemoteCollections(loadDetails = true) {
   // One batch prevents thousands of individual HTTP requests for an export.
   const root = makeCollection({
     name: "workspace", folders: restCollectionStore.value.state, requests: [],
@@ -476,15 +534,16 @@ export async function ensureAllRemoteCollections() {
     variables: [], preRequestScript: "", testScript: "",
   })
   if (usesLazyRemoteCollections()) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const ids = index?.collections.map((row) => row.id).filter((id) => !isRemoteFolderLoaded(id)) ?? []
-      if (!ids.length) break
-      for (const id of ids) await ensureRemoteFolder(id, true)
-      if (attempt === 2 && index?.collections.some((row) => !isRemoteFolderLoaded(row.id)))
-        throw new Error("工作区目录持续变化，请重试")
-    }
+    // Export and sync need the whole tree. The complete index provides every
+    // request summary in one snapshot instead of one request per folder.
+    const { data: complete } = await axios.get<RemoteCollectionIndex>(`${base()}/index`, {
+      headers, withCredentials: true,
+    })
+    if (complete.lazyRequests) throw new Error("工作区索引格式不正确")
+    install(complete)
     root.folders = restCollectionStore.value.state
   }
+  if (!loadDetails) return root.folders
   const hydrated = await ensureRemoteCollection(root)
   return hydrated.folders
 }

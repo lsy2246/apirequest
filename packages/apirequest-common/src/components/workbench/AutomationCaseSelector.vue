@@ -88,7 +88,8 @@
             />
             <span
               v-else-if="row.node.kind === 'request'"
-              class="shrink-0 font-mono text-tiny text-accent"
+              class="shrink-0 font-mono text-tiny"
+              :style="{ color: getMethodLabelColor(row.node.method ?? '') }"
               >{{ row.node.method }}</span
             >
             <IconFlaskConical
@@ -124,13 +125,14 @@
     <p class="text-xs leading-relaxed text-secondaryLight">
       {{ t("automation_cases.help") }}
     </p>
-    <p v-if="!selected.length" role="alert" class="text-xs text-red-500">
+    <p v-if="!selected.length" class="text-xs text-secondaryLight">
       {{ t("automation_cases.empty") }}
     </p>
   </fieldset>
 </template>
 
 <script setup lang="ts">
+import { getMethodLabelColor } from "~/helpers/rest/labelColoring"
 import { computed, ref, watch } from "vue"
 import type { CaseMap, HoppCollection } from "@apirequest/data"
 import {

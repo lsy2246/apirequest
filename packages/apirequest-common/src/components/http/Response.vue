@@ -26,18 +26,14 @@
 </template>
 
 <script setup lang="ts">
-import { backendOperation } from "~/helpers/backend/operation";
-import { useVModel } from "@vueuse/core";
-import { computed, ref } from "vue";
-import { HoppRequestDocument } from "~/helpers/tab/document";
-import { makeRESTResponseExample } from "~/helpers/tab/saved-response";
-import { editRESTRequest } from "~/newstore/collections";
-import { useToast } from "@composables/toast";
-import { useI18n } from "@composables/i18n";
-import { runMutation } from "~/helpers/backend/GQLClient";
-import { invokeAction } from "~/helpers/actions";
-
-import * as E from "fp-ts/Either";
+import { useVModel } from "@vueuse/core"
+import { computed, ref } from "vue"
+import { HoppRequestDocument } from "~/helpers/tab/document"
+import { makeRESTResponseExample } from "~/helpers/tab/saved-response"
+import { editRESTRequest } from "~/newstore/collections"
+import { useToast } from "@composables/toast"
+import { useI18n } from "@composables/i18n"
+import { invokeAction } from "~/helpers/actions"
 
 const t = useI18n()
 const toast = useToast()
@@ -49,7 +45,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: "update:tab", val: HoppRequestDocument): void
+  (e: "update:document", val: HoppRequestDocument): void
 }>()
 
 const doc = useVModel(props, "document", emit)
@@ -82,50 +78,31 @@ const saveAsExample = () => {
 
 const onSaveAsExample = () => {
   const response = doc.value.response
+  const saveCtx = doc.value.saveContext
+  if (!response || (response.type !== "success" && response.type !== "fail"))
+    return
 
-  if (response && response.type === "success") {
-    const resName = responseName.value.trim()
-    const responseObj = makeRESTResponseExample(resName, response)
+  const resName = responseName.value.trim()
+  if (!resName) return
 
-    doc.value.request.responses = {
-      ...doc.value.request.responses,
-      [resName]: responseObj,
+  try {
+    if (!saveCtx || saveCtx.requestIndex === undefined) {
+      throw new Error("Missing request save location")
     }
-
+    const req = {
+      ...doc.value.request,
+      responses: {
+        ...doc.value.request.responses,
+        [resName]: makeRESTResponseExample(resName, response),
+      },
+    }
+    editRESTRequest(saveCtx.folderPath, saveCtx.requestIndex, req)
+    doc.value.request = req
     showSaveResponseName.value = false
-
-    const saveCtx = doc.value.saveContext
-    if (!saveCtx) return
-
-    const req = doc.value.request
-
-    if (saveCtx.originLocation === "user-collection") {
-      try {
-        editRESTRequest(saveCtx.folderPath, saveCtx.requestIndex, req)
-        toast.success(`${t("response.saved")}`)
-        responseName.value = ""
-      } catch (e) {
-        console.error(e)
-        responseName.value = ""
-      }
-    } else {
-      runMutation(backendOperation("UpdateRequestDocument"), {
-        requestID: saveCtx.requestID,
-        data: {
-          title: req.name,
-          request: JSON.stringify(req),
-        },
-      })().then((result) => {
-        if (E.isLeft(result)) {
-          toast.error(`${t("profile.no_permission")}`)
-          responseName.value = ""
-        } else {
-          doc.value.isDirty = false
-          toast.success(`${t("request.saved")}`)
-          responseName.value = ""
-        }
-      })
-    }
+    responseName.value = ""
+    toast.success(t("response.saved"))
+  } catch {
+    toast.error(t("ui_detail.save_failed"))
   }
 }
 </script>

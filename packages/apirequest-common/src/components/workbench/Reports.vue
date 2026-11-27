@@ -69,9 +69,11 @@
             "
             >{{ t(`automation_webhook.${report.notification.status}`) }}</span
           >
-          <span v-if="report.kind === 'automation'" class="text-accent">{{
-            reportStatusLabel(report)
-          }}</span>
+          <span
+            v-if="report.kind === 'automation'"
+            :class="operationStatusClass(report.automation?.status ?? '')"
+            >{{ reportStatusLabel(report) }}</span
+          >
           <span
             >{{ report.summary.completed
             }}<template
@@ -160,6 +162,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import { operationStatusClass } from "~/helpers/ui-states"
 import AutomationRunControls from "./AutomationRunControls.vue"
 import { reportFailureCount } from "~/helpers/runner/outcome"
 import { useWorkbenchLiveQuery } from "~/composables/workbenchLive"

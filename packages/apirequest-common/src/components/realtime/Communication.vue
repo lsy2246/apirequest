@@ -66,9 +66,13 @@
         <div class="flex">
           <HoppButtonSecondary
             v-tippy="{ theme: 'tooltip', delay: [500, 20], allowHTML: true }"
-            :title="`${t(
-              'request.run'
-            )} <kbd>${getSpecialKey()}</kbd><kbd>↩</kbd>`"
+            :title="
+              !isConnected
+                ? t('ui_detail.connect_first')
+                : !communicationBody
+                  ? t('ui_detail.message_first')
+                  : `${t('request.run')} <kbd>${getSpecialKey()}</kbd><kbd>↩</kbd>`
+            "
             :label="`${t('action.send')}`"
             :disabled="!communicationBody || !isConnected"
             :icon="IconSend"
@@ -130,27 +134,27 @@
 </template>
 <script setup lang="ts">
 import WorkbenchToggle from "~/components/workbench/Toggle.vue"
-import { Component, computed, reactive, ref, useId } from "vue";
-import IconSend from "~icons/lucide/send";
-import IconWrapText from "~icons/lucide/wrap-text";
-import IconTrash2 from "~icons/lucide/trash-2";
-import IconWand2 from "~icons/lucide/wand-2";
-import IconCheck from "~icons/lucide/check";
-import IconInfo from "~icons/lucide/info";
-import IconDone from "~icons/lucide/check";
-import IconFilePlus from "~icons/lucide/file-plus";
-import { pipe } from "fp-ts/function";
-import * as TO from "fp-ts/TaskOption";
-import * as O from "fp-ts/Option";
-import { refAutoReset } from "@vueuse/core";
-import { useCodemirror } from "@composables/codemirror";
-import jsonLinter from "@helpers/editor/linting/json";
-import { readFileAsText } from "@functional/files";
-import { useI18n } from "@composables/i18n";
-import { useToast } from "@composables/toast";
-import { isJSONContentType } from "@helpers/utils/contenttypes";
-import { defineActionHandler } from "~/helpers/actions";
-import { getPlatformSpecialKey as getSpecialKey } from "~/helpers/platformutils";
+import { Component, computed, reactive, ref, useId } from "vue"
+import IconSend from "~icons/lucide/send"
+import IconWrapText from "~icons/lucide/wrap-text"
+import IconTrash2 from "~icons/lucide/trash-2"
+import IconWand2 from "~icons/lucide/wand-2"
+import IconCheck from "~icons/lucide/check"
+import IconInfo from "~icons/lucide/info"
+import IconDone from "~icons/lucide/check"
+import IconFilePlus from "~icons/lucide/file-plus"
+import { pipe } from "fp-ts/function"
+import * as TO from "fp-ts/TaskOption"
+import * as O from "fp-ts/Option"
+import { refAutoReset } from "@vueuse/core"
+import { useCodemirror } from "@composables/codemirror"
+import jsonLinter from "@helpers/editor/linting/json"
+import { readFileAsText } from "@functional/files"
+import { useI18n } from "@composables/i18n"
+import { useToast } from "@composables/toast"
+import { isJSONContentType } from "@helpers/utils/contenttypes"
+import { defineActionHandler } from "~/helpers/actions"
+import { getPlatformSpecialKey as getSpecialKey } from "~/helpers/platformutils"
 
 const props = defineProps({
   active: { type: Boolean, default: true },

@@ -318,7 +318,14 @@
           v-else-if="!rows.length"
           :title="t('mock_list.empty')"
           :icon="IconRoute"
-        />
+        >
+          <HoppButtonSecondary
+            v-if="search || statusFilter !== 'all' || typeFilter !== 'all'"
+            :label="t('shared_requests.clear_filter')"
+            outline
+            @click="clearFilters"
+          />
+        </WorkbenchState>
       </div>
     </section>
 
@@ -383,6 +390,7 @@
     <HoppSmartModal
       v-if="editorOpen"
       dialog
+      styles="!w-[calc(100%-2rem)] sm:max-w-3xl"
       :title="rule?.name || t('mock_rule.rule')"
       @close="closeEditor"
     >
@@ -1256,6 +1264,11 @@ const scopeID = ref<string | null>(null)
 const scopeServer = computed(() =>
   servers.value.find((s) => s.id === scopeID.value)
 )
+function clearFilters() {
+  search.value = ""
+  statusFilter.value = "all"
+  typeFilter.value = "all"
+}
 const search = ref("")
 const typeFilter = ref("all")
 const statusFilter = ref("all")
@@ -1796,10 +1809,10 @@ function moveRule() {
 
 <style scoped>
 .small {
-  @apply rounded px-2 py-1.5 hover:bg-primaryLight disabled:opacity-40;
+  @apply rounded px-2 py-1.5 hover:bg-primaryLight disabled:opacity-50;
 }
 .icon-button {
-  @apply inline-flex shrink-0 items-center justify-center rounded p-2 text-secondaryLight hover:bg-primaryLight hover:text-accent disabled:opacity-40;
+  @apply inline-flex shrink-0 items-center justify-center rounded p-2 text-secondaryLight hover:bg-primaryLight hover:text-accent disabled:opacity-50;
 }
 .mock-row {
   @apply grid items-center gap-4 px-4 py-4;

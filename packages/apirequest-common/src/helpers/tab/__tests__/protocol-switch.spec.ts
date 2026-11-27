@@ -47,6 +47,22 @@ function setup() {
 }
 
 describe("当前标签协议切换", () => {
+  it("restores the selected request mode after persistence validation", () => {
+    const { tabs } = setup()
+    const doc = tabs.currentActiveTab.value!.document as HoppRequestDocument
+    doc.requestModePreference = "cases"
+    const persisted = WORKSPACE_TABS_STATE_SCHEMA.parse(
+      JSON.parse(JSON.stringify(tabs.persistableTabState.value))
+    )
+    const restored = new TestContainer().bind(WorkspaceTabsService)
+    restored.loadTabsFromPersistedState(
+      persisted as PersistableTabState<HoppTabDocument>
+    )
+    expect(restored.currentActiveTab.value!.document).toMatchObject({
+      requestModePreference: "cases",
+    })
+  })
+
   it("三种协议往返时保留标签 ID、请求内容和各自草稿", () => {
     const { tabs, services, original } = setup()
     const id = tabs.currentActiveTab.value.id
@@ -121,13 +137,13 @@ describe("当前标签协议切换", () => {
     const restoredServices = { ...services, tabs: restored }
     expect(switchActiveTabToREST(restoredServices)).toBe(true)
     expect(restored.currentActiveTab.value.id).toBe(id)
-    expect(restored.currentActiveTab.value.document).toMatchObject({
+    expect(restored.currentActiveTab.value!.document).toMatchObject({
       type: "request",
       request: original.request,
       saveContext: original.saveContext,
     })
     expect(switchActiveTabToWebSocket(restoredServices)).toBe(true)
-    expect(restored.currentActiveTab.value.document).toMatchObject({
+    expect(restored.currentActiveTab.value!.document).toMatchObject({
       type: "websocket",
       request: { endpoint: "wss://example.test/orders" },
     })

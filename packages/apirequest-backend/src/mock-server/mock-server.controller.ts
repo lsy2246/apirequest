@@ -1,3 +1,4 @@
+import { CapacityRate } from 'src/capacity/capacity.service';
 import { resolveMockAction, scopedMockCookies } from './mock-actions';
 import { mockRequestHeaders } from './mock-headers';
 import {
@@ -53,6 +54,7 @@ const ACTIVE_CONTENT_TYPES = new Set([
  */
 @UseGuards(ThrottlerBehindProxyGuard)
 @Controller({ path: 'mock' })
+@CapacityRate('publicMock')
 export class MockServerController {
   constructor(
     private readonly mockServerService: MockServerService,

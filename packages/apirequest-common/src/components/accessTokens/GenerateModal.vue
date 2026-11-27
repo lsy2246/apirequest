@@ -13,11 +13,16 @@
         <div
           class="flex items-center justify-between p-4 mt-4 rounded-md bg-primaryLight"
         >
-          <div class="text-secondaryDark">{{ accessToken }}</div>
+          <div class="min-w-0 flex-1 break-all font-mono text-secondaryDark">
+            {{ accessToken }}
+          </div>
           <HoppButtonSecondary
             outline
             filled
             :icon="copyIcon"
+            class="ml-3 shrink-0"
+            :aria-label="t('action.copy')"
+            :title="t('action.copy')"
             @click="copyAccessToken"
           />
         </div>

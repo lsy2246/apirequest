@@ -18,7 +18,18 @@
         <h2 class="text-xl font-semibold text-secondaryDark">
           {{ t("error.something_went_wrong") }}
         </h2>
-        <p class="text-secondaryLight">{{ error }}</p>
+        <p class="break-words text-secondaryLight">{{ error }}</p>
+        <HoppButtonSecondary
+          v-if="retryable"
+          :label="t('action.retry')"
+          outline
+          @click="
+            fetchDocs(
+              String(route.params.id ?? ''),
+              String(route.params.version ?? '')
+            )
+          "
+        />
       </div>
     </div>
 
@@ -59,6 +70,7 @@ import { platform } from "~/platform"
 import { useReadonlyStream } from "~/composables/stream"
 import { usePageHead } from "~/composables/head"
 
+const retryable = ref(false)
 const route = useRoute()
 const t = useI18n()
 
@@ -201,6 +213,7 @@ const allItems = computed<DocumentationItem[]>(() => {
 const fetchDocs = async (docId: string, version: string) => {
   loading.value = true
   error.value = null
+  retryable.value = false
 
   if (!docId) {
     error.value = t("documentation.publish.no_doc_id")
@@ -214,7 +227,14 @@ const fetchDocs = async (docId: string, version: string) => {
 
   if (E.isLeft(result)) {
     console.error("Error fetching published doc:", result.left)
-    error.value = t("documentation.publish.not_found")
+    retryable.value = result.left === "published_docs/load_failed"
+    error.value = t(
+      retryable.value
+        ? "workbench.load_failed_description"
+        : result.left === "published_docs/unauthorized"
+          ? "profile.no_permission"
+          : "documentation.publish.not_found"
+    )
     loading.value = false
     return
   }
@@ -250,14 +270,17 @@ const fetchDocs = async (docId: string, version: string) => {
     }
   }
 
-  const publishedData = JSON.parse(result.right.documentTree)
-
-  // Convert the REST API response (CollectionFolder) to HoppCollection format
-  const hoppCollection = collectionFolderToHoppCollection(publishedData)
-
-  collectionData.value = hoppCollection
-
-  loading.value = false
+  try {
+    const publishedData = JSON.parse(result.right.documentTree)
+    collectionData.value = collectionFolderToHoppCollection(publishedData)
+  } catch (cause) {
+    console.error("Error parsing published documentation:", cause)
+    collectionData.value = null
+    retryable.value = true
+    error.value = t("workbench.load_failed_description")
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(() => {

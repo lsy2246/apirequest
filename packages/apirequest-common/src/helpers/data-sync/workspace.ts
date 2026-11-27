@@ -47,6 +47,7 @@ import { CaseSchema } from "~/helpers/request-cases/model"
 import { type Entry, restoreOmitted, sanitizeEntry } from "./model"
 
 import { snapshotCapture, importCapture } from "./capture"
+import { moduleFor, type ModuleID } from "./modules"
 
 const native = () =>
   Boolean(platform.localDesktop || import.meta.env.VITE_WORKBENCH_NATIVE)
@@ -83,16 +84,34 @@ function hydrate(id: string, vars: any[]) {
     }
   })
 }
+export type CatalogCounts = Partial<Record<ModuleID, number>>
+
+export async function snapshotCatalogCounts(signal?: AbortSignal): Promise<CatalogCounts> {
+  const settings = Object.keys(getDefaultSettings()).filter(isPortablePreference).length
+  return native()
+    ? { settings }
+    : { ...(await workbenchMcpAPI<CatalogCounts>("data/catalog-counts", undefined, signal)), settings }
+}
+
+const isPortablePreference = (key: string) =>
+  !/^(sync|TELEMETRY|HAS_OPENED_SPOTLIGHT|ENCODE_MODE)/.test(key)
+
 export async function snapshot(
   sensitive = false,
   attachments = true,
-  includeCapture = false
+  includeCapture = false,
+  modules?: readonly ModuleID[]
 ): Promise<Entry[]> {
-  await (await import("~/helpers/remote-collections")).ensureAllRemoteCollections()
+  const includes = (module: ModuleID) => !modules || modules.includes(module)
+  const interfaces = includes("interfaces")
+  const needsCollectionAliases = interfaces || includes("automation") || includes("mock")
+  const tree = needsCollectionAliases
+    ? await (await import("~/helpers/remote-collections")).ensureAllRemoteCollections(interfaces)
+    : []
   const entries: Entry[] = [],
     aliases = new Map<string, string>()
-  const cases = useWorkbenchRequestCases()
-  await cases.ready
+  const cases = interfaces ? useWorkbenchRequestCases() : undefined
+  await cases?.ready
   const visit = (tree: HoppCollection[], parent?: string) => {
     for (const folder of tree) {
       const id = ref(folder)
@@ -100,21 +119,15 @@ export async function snapshot(
       const key = cid(id)
       if (folder.id) aliases.set(folder.id, key)
       aliases.set(id, key)
-      const {
-        folders,
-        requests,
-        id: _id,
-        _ref_id: _ref,
-        ...meta
-      } = cloneDeep(folder)
-      entries.push({
+      const { folders, requests, id: _id, _ref_id: _ref, ...meta } = folder
+      if (interfaces) entries.push({
         id: key,
         kind: "collection",
         name: folder.name,
         parent,
         dependencies: parent ? [parent] : [],
         data: {
-          ...meta,
+          ...cloneDeep(meta),
           _ref_id: id,
           variables: hydrate(id, meta.variables ?? []),
         },
@@ -126,7 +139,8 @@ export async function snapshot(
         const key = rid(id)
         if (request.id) aliases.set(request.id, key)
         aliases.set(id, key)
-        const { id: serverID, ...value } = request
+        if (!cases) continue
+        const { id: serverID, ...value } = cloneDeep(request)
         const savedCases = cloneDeep(
           cases.cases.value[id] ??
             (serverID ? cases.cases.value[serverID] : undefined) ??
@@ -145,10 +159,11 @@ export async function snapshot(
       visit(folders, key)
     }
   }
-  visit(restCollectionStore.value.state)
+  visit(tree)
   for (const environment of environmentsStore.value.environments) {
     const key = eid(environment.id)
     aliases.set(environment.id, key)
+    if (!includes("environments")) continue
     entries.push({
       id: key,
       kind: "environment",
@@ -162,7 +177,8 @@ export async function snapshot(
     })
   }
   const globalID = getGlobalVariableID()
-  entries.push({
+  if (globalID) aliases.set(globalID, eid("global"))
+  if (includes("environments")) entries.push({
     id: eid("global"),
     kind: "environment",
     name: "Global",
@@ -174,10 +190,15 @@ export async function snapshot(
     },
     omitted: [],
   })
-  const extras: Entry[] = native()
-    ? await nativeExtras()
-    : await workbenchMcpAPI("data/extras")
+  const extraKinds = (["automation", "load_test", "websocket", "mock"] as const)
+    .filter((kind) => includes(moduleFor(kind)))
+  const extras: Entry[] = !extraKinds.length
+    ? []
+    : native()
+      ? await nativeExtras(extraKinds)
+      : await workbenchMcpAPI(`data/extras?kinds=${extraKinds.join(",")}`)
   for (const entry of extras) {
+    if (!includes(moduleFor(entry.kind))) continue
     for (const field of ["collectionID", "requestID", "environmentID"]) {
       const id = entry.data[field]
       if (typeof id === "string" && aliases.has(id)) {
@@ -213,8 +234,8 @@ export async function snapshot(
     ENABLE_GQL_IN_REST_WORKSPACE: "GraphQL 入口",
   }
   const defaults = getDefaultSettings()
-  for (const key of Object.keys(defaults)) {
-    if (/^(sync|TELEMETRY|HAS_OPENED_SPOTLIGHT|ENCODE_MODE)/.test(key)) continue
+  for (const key of includes("settings") ? Object.keys(defaults) : []) {
+    if (!isPortablePreference(key)) continue
     entries.push({
       id: `preference:${key}`,
       kind: "preference",
@@ -224,13 +245,16 @@ export async function snapshot(
       omitted: [],
     })
   }
-  if (includeCapture) entries.push(...(await snapshotCapture()))
+  if (includeCapture && includes("capture")) entries.push(...(await snapshotCapture()))
   return entries.map((e) => sanitizeEntry(e, sensitive, attachments))
 }
 
-async function nativeExtras(): Promise<Entry[]> {
+async function nativeExtras(
+  kinds: readonly ("automation" | "load_test" | "websocket" | "mock")[]
+): Promise<Entry[]> {
   const entries: Entry[] = []
-  for (const kind of ["automation", "load_test", "websocket"] as const) {
+  for (const kind of kinds) {
+    if (kind === "mock") continue
     for (const { id, data } of await configurations(kind)) {
       const {
         revision: _revision,
@@ -252,6 +276,7 @@ async function nativeExtras(): Promise<Entry[]> {
       })
     }
   }
+  if (!kinds.includes("mock")) return entries
   for (const server of await mockRuleAPI<RuleServer[]>()) {
     const state = await mockRuleAPI<MockRuleState>(server.id)
     entries.push({
@@ -415,7 +440,7 @@ export async function importEntries(
     // 订阅可能在服务端提交期间更新其他配置，基于最新状态合并，避免回写旧的整棵树。
     return importEntries(
       incoming,
-      await snapshot(true, true, captures.length > 0),
+      await snapshot(true, true, captures.length > 0, [...new Set(items.map((entry) => moduleFor(entry.kind)))]),
       false,
       result.ids
     )

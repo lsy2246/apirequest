@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   Param,
+  PayloadTooLargeException,
   Post,
   Query,
   Req,
@@ -20,6 +21,7 @@ import {
   getLocalWorkspaceConfig,
   LOCAL_WORKSPACE_UID,
 } from 'src/auth/local-workspace/policy';
+import { CapacityRate, CapacityService, MIB } from 'src/capacity/capacity.service';
 import { AuthUser } from 'src/types/AuthUser';
 import { ThrottlerBehindProxyGuard } from 'src/guards/throttler-behind-proxy.guard';
 import { WorkbenchMcpService } from './mcp.service';
@@ -32,7 +34,7 @@ import { WorkspaceIndexService } from './workspace-index.service';
 import { AutomationWebhookService } from './automation-webhook.service';
 import { SiteSettingsService } from 'src/site-settings/site-settings.service';
 
-type OwnerRequest = Request & { user: AuthUser };
+type OwnerRequest = Request & { user: AuthUser; workbenchImportBytes?: number };
 @Controller({ path: 'workbench-mcp', version: '1' })
 @UseGuards(ThrottlerBehindProxyGuard)
 export class WorkbenchMcpController {
@@ -45,6 +47,7 @@ export class WorkbenchMcpController {
     private readonly workspaceIndex: WorkspaceIndexService,
     private readonly webhooks: AutomationWebhookService,
     private readonly site: SiteSettingsService,
+    private readonly capacity: CapacityService,
   ) {}
   private local(req: Request) {
     const policy = getLocalWorkspaceConfig(this.config);
@@ -66,6 +69,7 @@ export class WorkbenchMcpController {
       throw new ForbiddenException();
   }
   @Get('state')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   async state(
     @Req() req: OwnerRequest,
@@ -76,6 +80,7 @@ export class WorkbenchMcpController {
     return this.service.state(req.user.uid);
   }
   @Get('collections/index')
+  @CapacityRate('batchReads')
   @UseGuards(JwtAuthGuard)
   async collectionIndex(
     @Req() req: OwnerRequest,
@@ -88,15 +93,17 @@ export class WorkbenchMcpController {
       ? `${isLazy ? 'lazy-' : ''}${await this.workspaceIndex.revision(req.user.uid)}`
       : undefined;
     res.setHeader('Cache-Control', 'private, no-cache');
+    res.setHeader('X-Workbench-Detail-Batch-Size', this.capacity.current.detailBatchSize);
     if (req.headers['if-none-match'] === `W/"${currentRevision}"`) {
       res.setHeader('ETag', `W/"${currentRevision}"`);
       return res.status(304).end();
     }
     const data = await this.workspaceIndex.index(req.user.uid, isLazy);
     res.setHeader('ETag', `W/"${data.revision}"`);
-    return res.json(data);
+    return res.json({ ...data, detailBatchSize: this.capacity.current.detailBatchSize });
   }
   @Get('collections/folders/:id/requests')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   async collectionFolderRequests(
     @Req() req: OwnerRequest,
@@ -115,18 +122,21 @@ export class WorkbenchMcpController {
     );
   }
   @Get('collections/search')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   async collectionSearch(@Req() req: OwnerRequest, @Query('q') query: string) {
     this.owner(req);
     return this.workspaceIndex.searchRequests(req.user.uid, query);
   }
   @Get('collections/requests/:id')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   async collectionRequest(@Req() req: OwnerRequest, @Param('id') id: string) {
     this.owner(req);
     return this.workspaceIndex.request(req.user.uid, id);
   }
   @Post('collections/requests/batch')
+  @CapacityRate('batchReads')
   @HttpCode(200)
   @UseGuards(JwtAuthGuard)
   async collectionRequests(
@@ -159,22 +169,39 @@ export class WorkbenchMcpController {
     );
   }
   @Get('data/extras')
+  @CapacityRate('batchReads')
   @UseGuards(JwtAuthGuard)
-  syncExtras(@Req() req: OwnerRequest) {
+  syncExtras(@Req() req: OwnerRequest, @Query('kinds') kinds?: string) {
     this.owner(req);
-    return this.dataSync.extras(req.user.uid);
+    return this.dataSync.extras(req.user.uid, kinds);
+  }
+
+  @Get('data/catalog-counts')
+  @CapacityRate('workspaceReads')
+  @UseGuards(JwtAuthGuard)
+  syncCatalogCounts(@Req() req: OwnerRequest) {
+    this.owner(req);
+    return this.dataSync.catalogCounts(req.user.uid);
   }
   @Post('data/workspace/import')
   @UseGuards(JwtAuthGuard)
   syncWorkspace(@Req() req: OwnerRequest, @Body() body: unknown) {
     this.owner(req);
+    const limitMiB = this.capacity.current.configImportMiB;
+    const bytes = req.workbenchImportBytes ?? Buffer.byteLength(JSON.stringify(body) ?? '');
+    if (bytes > limitMiB * MIB)
+      throw new PayloadTooLargeException({
+        code: 'WORKSPACE_IMPORT_TOO_LARGE',
+        limitMiB,
+        message: `Workspace import exceeds ${limitMiB} MiB`,
+      });
     return this.dataSync.importWorkspace(req.user.uid, body);
   }
   @Get('events')
   @UseGuards(JwtAuthGuard)
   events(@Req() req: OwnerRequest, @Res() res: Response) {
     this.owner(req);
-    workbenchEvents.stream(req, res, req.user.uid);
+    workbenchEvents.stream(req, res, req.user.uid, this.capacity.current.eventConnections);
   }
   @Post('access')
   @UseGuards(JwtAuthGuard)
@@ -210,11 +237,25 @@ export class WorkbenchMcpController {
     return this.service.setApprovalPolicy(req.user.uid, body.required);
   }
   @Get('configs/:kind')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
-  async configs(@Req() req: OwnerRequest, @Param('kind') kind: string) {
+  async configs(
+    @Req() req: OwnerRequest,
+    @Param('kind') kind: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
     this.owner(req);
     entity(kind);
-    return this.domain.list(kind, req.user.uid, 100, 0);
+    const pageSize = limit === undefined ? 100 : Number(limit);
+    const start = offset === undefined ? 0 : Number(offset);
+    if (
+      (limit !== undefined && !/^\d+$/.test(limit)) ||
+      (offset !== undefined && !/^\d+$/.test(offset)) ||
+      !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100 ||
+      !Number.isSafeInteger(start) || start < 0 || start > 100000
+    ) throw new BadRequestException('Invalid pagination');
+    return this.domain.list(kind, req.user.uid, pageSize, start);
   }
   @Get('configs/:kind/:id')
   @UseGuards(JwtAuthGuard)
@@ -228,6 +269,7 @@ export class WorkbenchMcpController {
     return this.domain.get(kind, id, req.user.uid);
   }
   @Get('site-settings')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   siteSettings(@Req() req: OwnerRequest) {
     this.owner(req);
@@ -242,6 +284,7 @@ export class WorkbenchMcpController {
   }
 
   @Get('automation/notification-channels')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   notificationChannels(@Req() req: OwnerRequest) {
     this.owner(req);
@@ -281,6 +324,7 @@ export class WorkbenchMcpController {
   }
 
   @Get('automation/webhook')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   webhook(@Req() req: OwnerRequest) {
     this.owner(req);
@@ -309,6 +353,7 @@ export class WorkbenchMcpController {
   }
 
   @Get('automation/schedules')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   schedules(@Req() req: OwnerRequest) {
     this.owner(req);
@@ -316,6 +361,7 @@ export class WorkbenchMcpController {
   }
 
   @Get('automation/runs')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   runs(@Req() req: OwnerRequest) {
     this.owner(req);
@@ -335,6 +381,7 @@ export class WorkbenchMcpController {
   }
 
   @Get('automation/reports')
+  @CapacityRate('workspaceReads')
   @UseGuards(JwtAuthGuard)
   reports(@Req() req: OwnerRequest) {
     this.owner(req);
@@ -374,6 +421,7 @@ export class WorkbenchMcpController {
   }
 
   @Post('tool')
+  @CapacityRate('externalMcp')
   async tool(
     @Req() req: Request,
     @Body() body: unknown,

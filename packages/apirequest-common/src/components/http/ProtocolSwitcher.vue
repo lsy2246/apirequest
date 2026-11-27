@@ -32,28 +32,35 @@
         :autofocus="false"
         styles=""
         input-styles="border border-transparent bg-transparent text-tiny text-secondaryDark focus:border-divider focus:bg-primaryLight rounded px-2 py-0.5 outline-none transition-colors"
-        :placeholder="t('request.untitled')"
+        :placeholder="t('ui_detail.untitled')"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { useService } from "dioc/vue";
-import { useI18n } from "@composables/i18n";
-import { useReadonlyStream } from "@composables/stream";
-import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
-import { GQLTabConnectionService } from "~/services/gql-tab-connection.service";
-import { ScrollService } from "~/services/scroll.service";
-import { switchActiveTabToGQL, switchActiveTabToREST, switchActiveTabToWebSocket } from "~/helpers/tab/protocol-switch";
-import { defineActionHandler } from "~/helpers/actions";
-import { isRootRequestCollection, restCollections$ } from "~/newstore/collections";
-import IconChevronRight from "~icons/lucide/chevron-right";
-import IconGlobe from "~icons/lucide/globe";
-import IconGraphql from "~icons/hopp/graphql";
-import IconWebsocket from "~icons/hopp/websocket";
-import { isLocalWorkbench } from "~/platform";
+import { computed } from "vue"
+import { useService } from "dioc/vue"
+import { useI18n } from "@composables/i18n"
+import { useReadonlyStream } from "@composables/stream"
+import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
+import { GQLTabConnectionService } from "~/services/gql-tab-connection.service"
+import { ScrollService } from "~/services/scroll.service"
+import {
+  switchActiveTabToGQL,
+  switchActiveTabToREST,
+  switchActiveTabToWebSocket,
+} from "~/helpers/tab/protocol-switch"
+import { defineActionHandler } from "~/helpers/actions"
+import {
+  isRootRequestCollection,
+  restCollections$,
+} from "~/newstore/collections"
+import IconChevronRight from "~icons/lucide/chevron-right"
+import IconGlobe from "~icons/lucide/globe"
+import IconGraphql from "~icons/hopp/graphql"
+import IconWebsocket from "~icons/hopp/websocket"
+import { isLocalWorkbench } from "~/platform"
 
 const t = useI18n()
 
@@ -91,9 +98,11 @@ const requestName = computed({
   get: () => {
     const doc = currentDoc.value
     if (!doc) return ""
-    if (doc.type === "request") return doc.request.name
-    if (doc.type === "gql-request") return doc.request.name
-    if (doc.type === "websocket") return doc.name
+    if (doc.type === "request" || doc.type === "gql-request")
+      return !doc.saveContext && doc.request.name === "Untitled"
+        ? ""
+        : doc.request.name
+    if (doc.type === "websocket") return doc.name === "Untitled" ? "" : doc.name
     return ""
   },
   set: (value: string) => {

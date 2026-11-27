@@ -38,10 +38,8 @@
                     : t('response.please_save_request')
                 "
                 :icon="IconSave"
-                :class="{
-                  'opacity-75 cursor-not-allowed select-none': !isSavable,
-                }"
-                @click="isSavable ? onSaveAsExampleClick() : null"
+                :disabled="!isSavable"
+                @click="onSaveAsExampleClick"
               />
               <HoppButtonSecondary
                 v-tippy="{ theme: 'tooltip' }"
@@ -155,27 +153,33 @@
 </template>
 
 <script setup lang="ts">
-import IconWrapText from "~icons/lucide/wrap-text";
-import IconNetwork from "~icons/lucide/network";
-import IconMore from "~icons/lucide/more-horizontal";
-import IconSave from "~icons/lucide/save";
-import { computed, reactive, ref, watch } from "vue";
-import { useVModel } from "@vueuse/core";
-import { useService } from "dioc/vue";
-import { makeGQLResponseExample } from "~/helpers/tab/saved-response";
-import { useCodemirror } from "@composables/codemirror";
-import { useI18n } from "@composables/i18n";
-import { useToast } from "@composables/toast";
-import { defineActionHandler, invokeAction } from "~/helpers/actions";
-import { getPlatformSpecialKey as getSpecialKey } from "~/helpers/platformutils";
-import { GQLResponseEvent, GQLTabConnectionService } from "~/services/gql-tab-connection.service";
-import { useNestedSetting } from "~/composables/settings";
-import { toggleNestedSetting } from "~/newstore/settings";
-import { useCopyResponse, useDownloadResponse } from "~/composables/lens-actions";
-import { editRESTRequest } from "~/newstore/collections";
-import { HoppGQLRequestDocument } from "~/helpers/tab/document";
+import IconWrapText from "~icons/lucide/wrap-text"
+import IconNetwork from "~icons/lucide/network"
+import IconMore from "~icons/lucide/more-horizontal"
+import IconSave from "~icons/lucide/save"
+import { computed, reactive, ref, watch } from "vue"
+import { useVModel } from "@vueuse/core"
+import { useService } from "dioc/vue"
+import { makeGQLResponseExample } from "~/helpers/tab/saved-response"
+import { useCodemirror } from "@composables/codemirror"
+import { useI18n } from "@composables/i18n"
+import { useToast } from "@composables/toast"
+import { defineActionHandler, invokeAction } from "~/helpers/actions"
+import { getPlatformSpecialKey as getSpecialKey } from "~/helpers/platformutils"
+import {
+  GQLResponseEvent,
+  GQLTabConnectionService,
+} from "~/services/gql-tab-connection.service"
+import { useNestedSetting } from "~/composables/settings"
+import { toggleNestedSetting } from "~/newstore/settings"
+import {
+  useCopyResponse,
+  useDownloadResponse,
+} from "~/composables/lens-actions"
+import { editRESTRequest } from "~/newstore/collections"
+import { HoppGQLRequestDocument } from "~/helpers/tab/document"
 
-import * as E from "fp-ts/Either";
+import * as E from "fp-ts/Either"
 const t = useI18n()
 const toast = useToast()
 const props = withDefaults(

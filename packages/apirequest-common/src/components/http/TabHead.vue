@@ -114,20 +114,23 @@
 </template>
 
 <script setup lang="ts">
-import { platform } from "~/platform";
-import { ref, computed } from "vue";
-import { TippyComponent } from "vue-tippy";
-import { getMethodLabelColorClassOf } from "~/helpers/rest/labelColoring";
-import { LATEST_RESPONSE_NAME } from "~/helpers/tab/saved-response";
-import { useI18n } from "~/composables/i18n";
-import IconXCircle from "~icons/lucide/x-circle";
-import IconXSquare from "~icons/lucide/x-square";
-import IconFileEdit from "~icons/lucide/file-edit";
-import IconCopy from "~icons/lucide/copy";
-import IconShare2 from "~icons/lucide/share-2";
-import { HoppTab } from "~/services/tab";
-import { HoppRequestDocument, HoppSavedExampleDocument } from "~/helpers/tab/document";
-import { restCollectionStore } from "~/newstore/collections";
+import { platform } from "~/platform"
+import { ref, computed } from "vue"
+import { TippyComponent } from "vue-tippy"
+import { getMethodLabelColorClassOf } from "~/helpers/rest/labelColoring"
+import { LATEST_RESPONSE_NAME } from "~/helpers/tab/saved-response"
+import { useI18n } from "~/composables/i18n"
+import IconXCircle from "~icons/lucide/x-circle"
+import IconXSquare from "~icons/lucide/x-square"
+import IconFileEdit from "~icons/lucide/file-edit"
+import IconCopy from "~icons/lucide/copy"
+import IconShare2 from "~icons/lucide/share-2"
+import { HoppTab } from "~/services/tab"
+import {
+  HoppRequestDocument,
+  HoppSavedExampleDocument,
+} from "~/helpers/tab/document"
+import { restCollectionStore } from "~/newstore/collections"
 
 const t = useI18n()
 
@@ -139,7 +142,11 @@ const props = defineProps<{
 const tabState = computed(() => {
   if (props.tab.document.type === "request") {
     return {
-      name: props.tab.document.request.name,
+      name:
+        !props.tab.document.saveContext &&
+        props.tab.document.request.name === "Untitled"
+          ? t("ui_detail.untitled")
+          : props.tab.document.request.name,
       method: props.tab.document.request.method,
       request: props.tab.document.request,
     }
@@ -156,7 +163,7 @@ const tabState = computed(() => {
   }
   // Fallback for transient states (e.g., during protocol switch)
   return {
-    name: "Untitled",
+    name: t("ui_detail.untitled"),
     method: "GET",
     request: null,
   }

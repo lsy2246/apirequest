@@ -182,6 +182,49 @@ describe("remote collection detail loading", () => {
     expect(mocks.get).toHaveBeenCalledTimes(3)
   })
 
+  it("honors the server cooldown before retrying a throttled folder", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockRejectedValueOnce({ response: { status: 429, headers: { "retry-after": "1" } } })
+      .mockResolvedValueOnce({ data: {
+        revision: "index-1", requests: [snapshot().requests[0]], nextCursor: null,
+      } })
+    vi.useFakeTimers()
+    try {
+      const loading = remote.ensureRemoteFolder("folder")
+      await vi.advanceTimersByTimeAsync(1)
+      expect(mocks.get).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(900)
+      expect(mocks.get).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(100)
+      await loading
+      expect(mocks.get).toHaveBeenCalledTimes(3)
+      expect(remote.remoteFolderErrors.has("folder")).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("skips queued restored folders after the sidebar closes", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockResolvedValueOnce({ data: {
+      revision: "index-1", requests: [snapshot().requests[0]], nextCursor: null,
+    } })
+    const controller = new AbortController()
+    const first = remote.ensureRemoteFolder("folder")
+    const cancelled = remote.ensureRemoteFolder("root", false, controller.signal)
+    controller.abort()
+    await expect(cancelled).rejects.toBeDefined()
+    await first
+    expect(mocks.get).toHaveBeenCalledTimes(2)
+    expect(remote.remoteFolderErrors.has("root")).toBe(false)
+  })
+
   it("loads missing summaries before exporting a lazy collection", async () => {
     mocks.get.mockResolvedValueOnce({ status: 200, data: {
       ...snapshot(), revision: "lazy-index-1", lazyRequests: true, requests: [],
@@ -227,6 +270,23 @@ describe("remote collection detail loading", () => {
     expect(await remote.searchRemoteRequests("One")).toMatchObject([{ id: "one" }])
     expect(mocks.get.mock.calls.at(-1)?.[0]).toMatch(/collections\/search$/)
     expect(mocks.state.value.state[0].folders[0].requests).toEqual([])
+  })
+
+  it("loads all summaries with one full index for workspace export", async () => {
+    mocks.get.mockResolvedValueOnce({ status: 200, data: {
+      ...snapshot(), revision: "lazy-index-1", lazyRequests: true, requests: [],
+    } })
+    await remote.initRemoteCollectionIndex()
+    mocks.get.mockResolvedValueOnce({ data: snapshot() })
+    mocks.post.mockResolvedValueOnce({ data: [detail(), detail("two")] })
+    const collections = await remote.ensureAllRemoteCollections()
+    expect(() => assertCollectionLoaded(collections[0])).not.toThrow()
+    expect(collections[0].folders[0].requests[0]).toHaveProperty("body.body", '{"preserved":true}')
+    expect(mocks.get.mock.calls.map(([url]) => url)).toEqual([
+      expect.stringMatching(/collections\/index$/),
+      expect.stringMatching(/collections\/index$/),
+    ])
+    expect(mocks.post).toHaveBeenCalledTimes(1)
   })
 
   it("splits a large export into bounded detail requests", async () => {
@@ -314,6 +374,21 @@ describe("remote collection detail loading", () => {
     const full = await remote.ensureRemoteRequest(tree[0].folders[0].requests[0])
     expect(full).toHaveProperty("body.body", '{"preserved":true}')
     expect(mocks.get).toHaveBeenCalledTimes(1)
+  })
+
+  it("uses configured batches above the old 1000-item ceiling", async () => {
+    const index = snapshot()
+    const ids = Array.from({ length: 1001 }, (_, index) => `request-${index}`)
+    index.detailBatchSize = ids.length
+    index.requests = ids.map((id) => ({ ...index.requests[0], id }))
+    mocks.get.mockResolvedValueOnce({ status: 200, data: index })
+    await remote.initRemoteCollectionIndex()
+    mocks.post.mockResolvedValueOnce({ data: ids.map((id) => ({ ...detail(), id })) })
+
+    const result = await remote.ensureRemoteCollection(mocks.state.value.state[0])
+    expect(result.folders[0].requests).toHaveLength(ids.length)
+    expect(mocks.post).toHaveBeenCalledTimes(1)
+    expect(mocks.post.mock.calls[0][1].ids).toEqual(ids)
   })
 
   it("keeps all summaries intact if a detail batch is incomplete", async () => {

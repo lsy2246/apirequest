@@ -63,14 +63,28 @@
             <div class="flex gap-2">
               <HoppButtonPrimary
                 :label="
-                  t(enabled ? 'workbench_mcp.rotate' : 'workbench_mcp.enable')
+                  t(
+                    accessOperation === 'enable'
+                      ? 'ui_detail.enabling'
+                      : enabled
+                        ? 'workbench_mcp.rotate'
+                        : 'workbench_mcp.enable'
+                  )
                 "
+                :loading="accessOperation === 'enable'"
                 :disabled="busy || !loaded"
                 @click="setAccess(true)"
               />
               <HoppButtonSecondary
                 v-if="enabled"
-                :label="t('workbench_mcp.disable')"
+                :label="
+                  t(
+                    accessOperation === 'disable'
+                      ? 'ui_detail.disabling'
+                      : 'workbench_mcp.disable'
+                  )
+                "
+                :loading="accessOperation === 'disable'"
                 :disabled="busy"
                 outline
                 @click="setAccess(false)"
@@ -257,7 +271,7 @@
               </div>
               <span
                 class="shrink-0 rounded bg-primaryLight px-2 py-1 text-tiny"
-                :class="{ 'text-accent': proposal.status === 'pending' }"
+                :class="operationStatusClass(proposal.status)"
               >
                 {{ t(`workbench_mcp.statuses.${proposal.status}`) }}
               </span>
@@ -371,6 +385,7 @@
   </WorkbenchPage>
 </template>
 <script setup lang="ts">
+import { operationStatusClass } from "~/helpers/ui-states"
 import WorkbenchToggle from "~/components/workbench/Toggle.vue"
 import {
   provideWorkbenchLive,
@@ -494,7 +509,10 @@ const setApprovalPolicy = async (required: boolean) => {
     busy.value = false
   }
 }
+const accessOperation = ref<"enable" | "disable">()
 const setAccess = async (value: boolean) => {
+  if (busy.value) return
+  accessOperation.value = value ? "enable" : "disable"
   busy.value = true
   error.value = ""
   connectionJSON.value = ""
@@ -515,6 +533,7 @@ const setAccess = async (value: boolean) => {
     error.value = (e as Error).message
   } finally {
     busy.value = false
+    accessOperation.value = undefined
   }
 }
 const submitDecision = async (id: string, approve: boolean) => {

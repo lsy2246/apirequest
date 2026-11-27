@@ -35,7 +35,7 @@
         <span class="min-w-0">
           <span class="block font-medium text-secondaryDark">{{
             module.label
-          }}</span>
+          }}<span v-if="counts?.[module.id] !== undefined" class="ml-2 font-normal text-secondaryLight">{{ counts[module.id] }} 项</span></span>
           <span
             class="mt-1 block text-tiny leading-relaxed text-secondaryLight"
             >{{ module.description }}</span
@@ -54,6 +54,7 @@ import { type Entry } from "~/helpers/data-sync/model";
 import { dataModules, moduleFor, type ModuleID } from "~/helpers/data-sync/modules";
 const props = defineProps<{
   entries: Entry[]
+  counts?: Partial<Record<ModuleID, number>>
   modelValue: ModuleID[]
   disabled?: boolean
   imported?: boolean

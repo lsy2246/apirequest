@@ -167,6 +167,7 @@
       <WebhookSettings
         v-if="isLocalWorkbench() && workbenchSchedulesAvailable()"
       />
+      <ServiceCapacity v-if="isLocalWorkbench() && workbenchSchedulesAvailable()" />
       <WorkbenchDataSync v-if="isLocalWorkbench()" />
     </div>
     <HoppSmartConfirmModal
@@ -186,6 +187,7 @@
 </template>
 
 <script setup lang="ts">
+import ServiceCapacity from "~/components/workbench/ServiceCapacity.vue"
 import SiteSettings from "~/components/workbench/SiteSettings.vue"
 import WebhookSettings from "~/components/workbench/WebhookSettings.vue"
 import { workbenchSchedulesAvailable } from "~/helpers/workbench-mcp"

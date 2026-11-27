@@ -559,7 +559,7 @@ import IconChevronsUp from "~icons/lucide/chevrons-up"
 import IconListTree from "~icons/lucide/list-tree"
 import IconLocateFixed from "~icons/lucide/locate-fixed"
 import { HoppCollection, HoppRESTRequest, HoppGQLRequest, isGQLRequest } from "@apirequest/data"
-import { computed, nextTick, type ObjectDirective, PropType, ref, Ref, shallowRef, toRef, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, type ObjectDirective, PropType, ref, Ref, shallowRef, toRef, watch } from "vue"
 import { ChildrenResult, SmartTreeAdapter } from "@apirequest/ui/helpers"
 import { ensureRemoteRequestLocation, ensureRemoteFolder, isRemoteFolderLoaded, remoteFolderErrors, remoteFolderHasMore, remoteFolderLoading, retryRemoteFolder, remoteRequestLocation, searchRemoteRequests, usesLazyRemoteCollections, type RemoteCollectionIndex } from "~/helpers/remote-collections"
 import { useI18n } from "@composables/i18n"
@@ -916,6 +916,8 @@ type TreeExpansion = {
 }
 
 const expansionCommand = shallowRef<ExpansionCommand | null>(null)
+const expansionController = new AbortController()
+onBeforeUnmount(() => expansionController.abort())
 const collectionTree = ref<HTMLElement | null>(null)
 const sidebarVisible = useSetting("SIDEBAR")
 const nativeExpansion = platform.localDesktop
@@ -997,7 +999,9 @@ function applyTreeExpansion(
       : (savedOpen ?? (identityChanged ? false : undefined))
   if (target !== undefined && target !== isOpen) {
     if (target && folderID && usesLazyRemoteCollections())
-      void ensureRemoteFolder(folderID).catch(console.error)
+      void ensureRemoteFolder(folderID, false, expansionController.signal).catch((error) => {
+        if (!expansionController.signal.aborted) console.error(error)
+      })
     toggleChildren()
   }
 }

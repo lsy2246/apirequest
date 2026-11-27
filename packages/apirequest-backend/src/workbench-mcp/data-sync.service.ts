@@ -194,23 +194,57 @@ export class WorkbenchDataSyncService {
       pending: !flow.code && !flow.error && !cancel,
     };
   }
-  async extras(uid: string) {
-    const plans = await this.prisma.workbenchConfig.findMany({
-      where: {
-        ownerUid: uid,
-        kind: { in: ['automation', 'load_test', 'websocket'] },
-      },
-      orderBy: { id: 'asc' },
-    });
-    const mocks = await this.prisma.mockServer.findMany({
-      where: {
-        workspaceID: uid,
-        workspaceType: 'USER',
-        deletedAt: null,
-        collectionID: '',
-      },
-      orderBy: { id: 'asc' },
-    });
+  private mockWhere(uid: string) {
+    return {
+      workspaceID: uid,
+      workspaceType: 'USER' as const,
+      deletedAt: null,
+      collectionID: '',
+    };
+  }
+
+  async catalogCounts(uid: string) {
+    const where = { userUid: uid };
+    const [collections, requests, environments, plans, mocks] =
+      await Promise.all([
+        this.prisma.userCollection.count({ where }),
+        this.prisma.userRequest.count({ where }),
+        this.prisma.userEnvironment.count({ where: { ...where, isGlobal: false } }),
+        this.prisma.workbenchConfig.groupBy({
+          by: ['kind'],
+          where: { ownerUid: uid, kind: { in: ['automation', 'load_test', 'websocket'] } },
+          _count: { _all: true },
+        }),
+        this.prisma.mockServer.count({ where: this.mockWhere(uid) }),
+      ]);
+    const countPlan = (kind: string) =>
+      plans.find((plan) => plan.kind === kind)?._count._all ?? 0;
+    return {
+      interfaces: collections + requests + countPlan('load_test') + countPlan('websocket'),
+      environments: environments + 1,
+      automation: countPlan('automation'),
+      mock: mocks,
+    };
+  }
+
+  async extras(uid: string, selection?: string) {
+    const kinds = ['automation', 'load_test', 'websocket', 'mock'];
+    if (selection !== undefined && (typeof selection !== 'string' || selection.length > 40))
+      throw new BadRequestException('Invalid configuration types');
+    const wanted = selection === undefined ? kinds : selection.split(',');
+    if (wanted.some((kind) => !kinds.includes(kind)))
+      throw new BadRequestException('Invalid configuration types');
+    const planKinds = wanted.filter((kind) => kind !== 'mock');
+    const [plans, mocks] = await Promise.all([
+      planKinds.length ? this.prisma.workbenchConfig.findMany({
+        where: { ownerUid: uid, kind: { in: planKinds } },
+        orderBy: { id: 'asc' },
+      }) : [],
+      wanted.includes('mock') ? this.prisma.mockServer.findMany({
+        where: this.mockWhere(uid),
+        orderBy: { id: 'asc' },
+      }) : [],
+    ]);
     return [
       ...plans.map((row) => {
         const { revision: _revision, ...data } = JSON.parse(decrypt(row.value));

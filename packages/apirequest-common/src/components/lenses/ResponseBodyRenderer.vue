@@ -66,12 +66,16 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@composables/i18n";
-import { useVModel } from "@vueuse/core";
-import { computed, ref, watch } from "vue";
-import { getLensRenderers, getSuitableLenses, Lens } from "~/helpers/lenses/lenses";
-import { HoppRequestDocument } from "~/helpers/tab/document";
-import { ConsoleEntry } from "../console/Panel.vue";
+import { useI18n } from "@composables/i18n"
+import { useVModel } from "@vueuse/core"
+import { computed, ref, watch } from "vue"
+import {
+  getLensRenderers,
+  getSuitableLenses,
+  Lens,
+} from "~/helpers/lenses/lenses"
+import { HoppRequestDocument } from "~/helpers/tab/document"
+import { ConsoleEntry } from "../console/Panel.vue"
 
 const props = defineProps<{
   document: HoppRequestDocument
@@ -92,7 +96,11 @@ const t = useI18n()
 // from a collection (e.g. test-runner result rows), and `"success" &&
 // undefined` would leak `undefined` into the lens renderers' Boolean prop.
 const isSavable = computed(() =>
-  Boolean(doc.value.response?.type === "success" && doc.value.saveContext)
+  Boolean(
+    (doc.value.response?.type === "success" ||
+      doc.value.response?.type === "fail") &&
+    doc.value.saveContext
+  )
 )
 
 const showIndicator = computed(() => {

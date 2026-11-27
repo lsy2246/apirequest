@@ -68,10 +68,7 @@
           }}
           · {{ scheduleEnvironment(schedules[plan.id].environmentID) }}
         </p>
-        <p
-          v-else
-          class="mt-1 break-all font-mono text-tiny text-secondaryLight"
-        >
+        <p v-else class="mt-1 break-words text-xs text-secondaryLight">
           {{
             kind === "automation" && plan.config?.requestCases
               ? t("automation_cases.summary", {
@@ -84,9 +81,12 @@
                     ).length,
                   iterations: plan.config.iterations ?? 1,
                 })
-              : JSON.stringify(
-                  plan.config ?? { url: plan.url, protocols: plan.protocols }
-                )
+              : kind === "automation"
+                ? t("ui_detail.plan_summary", {
+                    iterations: plan.config?.iterations ?? 1,
+                    delay: plan.config?.delay ?? 0,
+                  })
+                : (plan.url ?? plan.name)
           }}
         </p>
       </div>
@@ -172,7 +172,7 @@ import { getAutomationConfig, type HoppRESTRequest } from "@apirequest/data"
 import { useI18n } from "~/composables/i18n"
 import { useWorkbenchCollections } from "~/composables/workbenchCollections"
 import {
-  workbenchMcpAPI,
+  listWorkbenchConfigs, workbenchMcpAPI,
   workbenchSchedulesAvailable,
   type AutomationSchedule,
   type SavedWorkbenchPlan,
@@ -243,13 +243,11 @@ const refreshSchedules = async () => {
 const refresh = async () => {
   loading.value = true
   try {
-    const result = await workbenchMcpAPI<{ items: SavedWorkbenchPlan[] }>(
-      `configs/${props.kind}`,
-      undefined,
-      controller.signal
+    const result = await listWorkbenchConfigs<SavedWorkbenchPlan>(
+      props.kind, controller.signal
     )
     if (alive) {
-      plans.value = result.items
+      plans.value = result
       error.value = ""
     }
     if (automationScheduling) await refreshSchedules()

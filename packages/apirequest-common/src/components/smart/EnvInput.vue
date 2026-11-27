@@ -9,6 +9,7 @@
         v-model="secretText"
         name="secret"
         :placeholder="placeholder"
+        :aria-label="placeholder"
         class="flex flex-1 bg-transparent pl-4"
         :class="styles"
         type="password"
@@ -64,30 +65,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick, computed, Ref } from "vue";
-import { EditorView, placeholder as placeholderExt, ViewPlugin, ViewUpdate, keymap, tooltips } from "@codemirror/view";
-import { Compartment, EditorSelection, EditorState, Extension } from "@codemirror/state";
-import { clone } from "lodash-es";
-import { history, historyKeymap } from "@codemirror/commands";
-import { inputTheme } from "~/helpers/editor/themes/baseTheme";
-import { HoppReactiveEnvPlugin } from "~/helpers/editor/extensions/HoppEnvironment";
-import { HoppPredefinedVariablesPlugin } from "~/helpers/editor/extensions/HoppPredefinedVariables";
-import { useReadonlyStream } from "@composables/stream";
-import { AggregateEnvironment, aggregateEnvsWithCurrentValue$ } from "~/newstore/environments";
-import { platform } from "~/platform";
-import { onClickOutside, useDebounceFn } from "@vueuse/core";
-import { InspectorResult } from "~/services/inspection";
-import { invokeAction } from "~/helpers/actions";
-import { useI18n } from "~/composables/i18n";
-import IconEye from "~icons/lucide/eye";
-import IconEyeoff from "~icons/lucide/eye-off";
-import { CompletionContext, autocompletion } from "@codemirror/autocomplete";
-import { useService } from "dioc/vue";
-import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
-import { syntaxTree } from "@codemirror/language";
-import { uniqueID } from "~/helpers/utils/uniqueID";
-import { getEffectiveVariablesForRequest } from "~/helpers/utils/environments";
-import { maskSecretValue } from "~/helpers/utils/secretMask";
+import { ref, onMounted, watch, nextTick, computed, Ref } from "vue"
+import { EditorView, placeholder as placeholderExt, ViewPlugin, ViewUpdate, keymap, tooltips } from "@codemirror/view"
+import { Compartment, EditorSelection, EditorState, Extension } from "@codemirror/state"
+import { clone } from "lodash-es"
+import { history, historyKeymap } from "@codemirror/commands"
+import { inputTheme } from "~/helpers/editor/themes/baseTheme"
+import { HoppReactiveEnvPlugin } from "~/helpers/editor/extensions/HoppEnvironment"
+import { HoppPredefinedVariablesPlugin } from "~/helpers/editor/extensions/HoppPredefinedVariables"
+import { useReadonlyStream } from "@composables/stream"
+import { AggregateEnvironment, aggregateEnvsWithCurrentValue$ } from "~/newstore/environments"
+import { platform } from "~/platform"
+import { onClickOutside, useDebounceFn } from "@vueuse/core"
+import { InspectorResult } from "~/services/inspection"
+import { invokeAction } from "~/helpers/actions"
+import { useI18n } from "~/composables/i18n"
+import IconEye from "~icons/lucide/eye"
+import IconEyeoff from "~icons/lucide/eye-off"
+import { CompletionContext, autocompletion } from "@codemirror/autocomplete"
+import { useService } from "dioc/vue"
+import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
+import { syntaxTree } from "@codemirror/language"
+import { uniqueID } from "~/helpers/utils/uniqueID"
+import { getEffectiveVariablesForRequest } from "~/helpers/utils/environments"
+import { maskSecretValue } from "~/helpers/utils/secretMask"
 
 const t = useI18n()
 

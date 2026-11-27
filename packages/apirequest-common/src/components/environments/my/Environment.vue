@@ -14,7 +14,7 @@
       type="button"
       class="flex min-w-0 flex-1 items-center py-2 pr-2 text-left transition group-hover:text-secondaryDark"
       :aria-label="displayName"
-      :title="t('action.edit')"
+      :title="displayName"
       @click="emitEditEnvironment"
     >
       <span class="truncate"> {{ displayName }} </span>
@@ -25,14 +25,14 @@
         v-tippy="{ theme: 'tooltip' }"
         :icon="IconEdit"
         :title="`${t('action.edit')}`"
-        class="hidden group-hover:inline-flex"
+        class="hidden group-hover:inline-flex group-focus-within:inline-flex"
         @click="emitEditEnvironment"
       />
       <HoppButtonSecondary
         v-tippy="{ theme: 'tooltip' }"
         :icon="IconCopy"
         :title="`${t('action.duplicate')}`"
-        class="hidden group-hover:inline-flex"
+        class="hidden group-hover:inline-flex group-focus-within:inline-flex"
         @click="duplicateEnvironments"
       />
     </div>

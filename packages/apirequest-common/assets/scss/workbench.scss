@@ -1,9 +1,37 @@
 /* Shared finish for the existing workspace and its portaled controls. */
 body:has(.api-workbench) {
-  --accent-color: #ec963c;
+  --accent-color: #ad5108;
   --accent-light-color: #fcebd7;
-  --accent-dark-color: #d78228;
+  --accent-dark-color: #914206;
   --accent-contrast-color: #fff;
+}
+
+:root:not(.light) body:has(.api-workbench) {
+  --accent-color: #f2a455;
+  --accent-light-color: #443020;
+  --accent-dark-color: #ffbc78;
+  --accent-contrast-color: #24170c;
+}
+
+.ui-status-success {
+  color: #15803d;
+}
+.ui-status-error {
+  color: #be123c;
+}
+.ui-status-warning {
+  color: #95520b;
+}
+:root:not(.light) {
+  .ui-status-success {
+    color: #86efac;
+  }
+  .ui-status-error {
+    color: #fda4af;
+  }
+  .ui-status-warning {
+    color: #fcd34d;
+  }
 }
 
 :is(.api-workbench, [role="dialog"], .workbench-select-content) {
@@ -315,4 +343,10 @@ body:has(.api-workbench) {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.api-workbench
+  :is(.capture-rows, .workbench-report-row, .workbench-history-panel)
+  .text-tiny {
+  font-size: 0.75rem;
 }

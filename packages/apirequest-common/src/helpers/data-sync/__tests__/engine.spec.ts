@@ -96,7 +96,7 @@ describe("selective bidirectional synchronization", () => {
     mocks.read.mockResolvedValue({ text: null, version: null })
     const preview = await prepareSync(syncState.value)
     await commitSync(syncState.value, preview)
-    expect(mocks.snapshot).toHaveBeenCalledWith(false, true, false)
+    expect(mocks.snapshot).toHaveBeenCalledWith(false, true, false, ["environments"])
     expect(
       (await decodePackage(mocks.write.mock.calls[0][1])).entries
     ).toHaveLength(1)

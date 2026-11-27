@@ -4,7 +4,7 @@
     dialog
     :title="t('documentation.title')"
     :full-width-body="true"
-    styles="sm:max-w-6xl xl:max-w-7xl 2xl:max-w-[80vw]"
+    styles="!w-[calc(100%-2rem)] sm:max-w-6xl xl:max-w-7xl 2xl:max-w-[80vw]"
     @close="hideModal"
   >
     <template #body>
@@ -49,7 +49,7 @@
       </div>
     </template>
     <template #footer>
-      <div class="flex justify-between items-center w-full">
+      <div class="flex flex-wrap justify-between items-center gap-3 w-full">
         <span class="flex space-x-2">
           <HoppButtonPrimary
             v-if="hasTeamWriteAccess"
@@ -68,11 +68,18 @@
           />
         </span>
 
-        <div class="flex space-x-2 items-center">
+        <div class="flex flex-wrap gap-2 items-center">
           <template v-if="platform.localDesktop && currentCollection">
             <HoppButtonSecondary
-              :label="t('documentation.publish.button')"
+              :label="
+                t(
+                  publishingLocal && localPublicationAction === 'publish'
+                    ? 'ui_detail.publishing'
+                    : 'documentation.publish.button'
+                )
+              "
               :disabled="publishingLocal"
+              :loading="publishingLocal && localPublicationAction === 'publish'"
               outline
               @click="publishLocal"
             />
@@ -84,8 +91,17 @@
             />
             <HoppButtonSecondary
               v-if="publishedLink"
-              :label="t('action.unpublish')"
+              :label="
+                t(
+                  publishingLocal && localPublicationAction === 'unpublish'
+                    ? 'ui_detail.unpublishing'
+                    : 'action.unpublish'
+                )
+              "
               :disabled="publishingLocal"
+              :loading="
+                publishingLocal && localPublicationAction === 'unpublish'
+              "
               @click="unpublishLocal"
             />
           </template>
@@ -494,6 +510,7 @@ const currentCollection = computed<HoppCollection | null>(() => {
 })
 const publishedLink = ref<string | null>(null)
 const publishingLocal = ref(false)
+const localPublicationAction = ref<"publish" | "unpublish">("publish")
 const localCollectionID = computed(
   () => currentCollection.value?.id ?? currentCollection.value?._ref_id
 )
@@ -522,6 +539,7 @@ if (platform.localDesktop) {
 async function publishLocal() {
   const id = localCollectionID.value
   if (!id || !currentCollection.value || publishingLocal.value) return
+  localPublicationAction.value = "publish"
   publishingLocal.value = true
   try {
     publishedLink.value = await workbenchMcpAPI<string>(
@@ -544,6 +562,7 @@ async function copyLocalLink() {
 async function unpublishLocal() {
   const id = localCollectionID.value
   if (!id || publishingLocal.value) return
+  localPublicationAction.value = "unpublish"
   publishingLocal.value = true
   try {
     await workbenchMcpAPI(`documentation/${encodeURIComponent(id)}/unpublish`)

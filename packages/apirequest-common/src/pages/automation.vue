@@ -48,9 +48,22 @@
     />
     <WorkbenchState
       v-else
+      :kind="error ? 'error' : 'empty'"
       :title="t('workbench.report_unavailable')"
-      :description="error || t('workbench.report_unavailable_description')"
-    />
+      :description="
+        error
+          ? t('workbench.load_failed_description')
+          : t('workbench.report_unavailable_description')
+      "
+      :detail="error"
+    >
+      <HoppButtonSecondary
+        v-if="error && reportID"
+        :label="t('action.retry')"
+        outline
+        @click="refreshReport(reportID)"
+      />
+    </WorkbenchState>
   </section>
   <WorkbenchPage v-else>
     <header class="workbench-page-header">

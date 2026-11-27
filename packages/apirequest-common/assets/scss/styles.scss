@@ -56,8 +56,8 @@
 input::placeholder,
 textarea::placeholder,
 .cm-placeholder {
-  @apply text-secondary;
-  @apply opacity-50 #{!important};
+  @apply text-secondaryLight;
+  opacity: 1;
 }
 
 input,
@@ -285,7 +285,6 @@ pre.ace_editor {
     border: 1px solid var(--status-missing-data-color);
   }
 }
-
 
 .splitpanes__pane {
   @apply will-change-auto;

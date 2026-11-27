@@ -7,9 +7,21 @@
   >
     <template #body>
       <div class="flex max-h-[65vh] flex-col gap-4 overflow-auto">
-        <HoppSmartSpinner v-if="loading" />
+        <div
+          v-if="loading"
+          role="status"
+          aria-busy="true"
+          class="flex items-center gap-2"
+        >
+          <HoppSmartSpinner />{{ t("ui_detail.loading_result") }}
+        </div>
         <p v-else-if="error" role="alert" class="text-red-500">
           {{ t("history_results.error") }}
+          <HoppButtonSecondary
+            :label="t('action.retry')"
+            outline
+            @click="loadResult"
+          />
         </p>
         <template v-else-if="detail && detail.state !== 'saved'">
           <div v-if="detail.summary" class="flex items-center gap-4">
@@ -44,6 +56,7 @@
             <span>{{ detail.metadata.contentType }}</span>
             <span>{{ formatBytes(detail.size) }}</span>
             <HoppButtonSecondary
+              v-if="!previewMissing"
               :label="t('action.download_file')"
               :to="nativeWorkspace ? undefined : `${bodyURL}?download=1`"
               @click="downloadNative()"
@@ -82,9 +95,24 @@
           <template
             v-else-if="detail.kind === 'json' || detail.kind === 'text'"
           >
-            <HoppSmartSpinner v-if="previewLoading" />
-            <p v-if="previewError" role="alert" class="text-red-500">
+            <div
+              v-if="previewLoading"
+              role="status"
+              aria-busy="true"
+              class="flex items-center gap-2"
+            >
+              <HoppSmartSpinner />{{ t("ui_detail.loading_result") }}
+            </div>
+            <p v-if="previewMissing" role="status" class="text-secondaryLight">
+              {{ t("history_results.body_missing") }}
+            </p>
+            <p v-else-if="previewError" role="alert" class="text-red-500">
               {{ t("history_results.error") }}
+              <HoppButtonSecondary
+                :label="t('action.retry')"
+                outline
+                @click="loadPreview(detail.kind === 'json')"
+              />
             </p>
             <img
               v-for="(src, index) in images"
@@ -202,6 +230,7 @@ const loading = ref(true)
 const error = ref(false)
 const previewLoading = ref(false)
 const previewError = ref(false)
+const previewMissing = ref(false)
 const preview = ref("")
 const truncated = ref(false)
 const images = ref<string[]>([])
@@ -258,6 +287,12 @@ function readJsonMedia(value: unknown) {
 }
 
 async function loadPreview(json: boolean) {
+  previewError.value = false
+  previewMissing.value = false
+  truncated.value = false
+  preview.value = ""
+  images.value = []
+  links.value = []
   previewLoading.value = true
   try {
     const response = await fetch(bodyURL.value, {
@@ -265,6 +300,10 @@ async function loadPreview(json: boolean) {
       credentials: nativeWorkspace ? "omit" : "include",
       signal: controller.signal,
     })
+    if (response.status === 404 || response.status === 410) {
+      previewMissing.value = true
+      return
+    }
     if (!response.ok || !response.body) throw new Error()
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
@@ -304,6 +343,8 @@ async function loadPreview(json: boolean) {
 }
 
 async function loadResult() {
+  loading.value = true
+  error.value = false
   try {
     await pendingHistoryResults.get(props.historyId)
     const result = await historyResultAPI<HistoryResultDetail>(path.value, {

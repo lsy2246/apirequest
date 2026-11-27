@@ -92,7 +92,8 @@ export async function prepareSync(state: State): Promise<Preview> {
   const local = await snapshot(
       false,
       true,
-      normalizeModules(state.selected).includes("capture")
+      normalizeModules(state.selected).includes("capture"),
+      state.selected
     ),
     remote = await readCloud(connection(state))
   const pack =
@@ -125,7 +126,8 @@ export async function commitSync(state: State, preview: Preview) {
   const current = await snapshot(
       false,
       true,
-      normalizeModules(state.selected).includes("capture")
+      normalizeModules(state.selected).includes("capture"),
+      state.selected
     ),
     map = new Map(current.map((e) => [e.id, e]))
   for (const row of preview.rows)

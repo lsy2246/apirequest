@@ -2,6 +2,7 @@ import {
   assertLocalWorkspaceRequest,
   getLocalWorkspaceConfig,
 } from './auth/local-workspace/policy';
+import { CapacityModule } from './capacity/capacity.module';
 import { WorkbenchMcpModule } from './workbench-mcp/mcp.module';
 import { HttpException, Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
@@ -87,6 +88,7 @@ import { PublishedDocsModule } from './published-docs/published-docs.module';
       ],
     }),
     PrismaModule,
+    CapacityModule,
     PubSubModule,
     UserModule,
     AuthModule,

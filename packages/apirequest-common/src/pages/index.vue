@@ -363,11 +363,19 @@ const sortTabs = (e: { oldIndex: number; newIndex: number }) => {
 
 const getTabName = (tab: HoppTab<HoppTabDocument>) => {
   if (tab.document.type === "request") {
-    return tab.document.request?.name ?? "Untitled"
+    return !tab.document.saveContext &&
+      tab.document.request?.name === "Untitled"
+      ? t("ui_detail.untitled")
+      : tab.document.request?.name || t("ui_detail.untitled")
   } else if (tab.document.type === "gql-request") {
-    return tab.document.request?.name ?? "Untitled"
+    return !tab.document.saveContext &&
+      tab.document.request?.name === "Untitled"
+      ? t("ui_detail.untitled")
+      : tab.document.request?.name || t("ui_detail.untitled")
   } else if (tab.document.type === "websocket") {
-    return tab.document.name || "WebSocket"
+    return tab.document.name === "Untitled"
+      ? t("ui_detail.untitled")
+      : tab.document.name || "WebSocket"
   } else if (
     tab.document.type === "example-response" ||
     tab.document.type === "gql-example-response"
@@ -375,10 +383,10 @@ const getTabName = (tab: HoppTab<HoppTabDocument>) => {
     const name = tab.document.response?.name
     return name === LATEST_RESPONSE_NAME
       ? t("response.latest")
-      : (name ?? "Untitled")
+      : name || t("ui_detail.untitled")
   }
 
-  return "Unnamed tab"
+  return t("ui_detail.untitled")
 }
 
 const inspectionService = useService(InspectionService)

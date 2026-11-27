@@ -156,8 +156,8 @@ describe('workspace navigation and detail reads', () => {
     ).rejects.toThrow('Request not found');
   });
 
-  it.each([null, {}, [''], [12], new Array(10001).fill('one')])(
-    'rejects malformed or oversized detail batches',
+  it.each([null, {}, [''], [12]])(
+    'rejects malformed detail batches',
     async (ids) => {
       await expect(service.requests('owner', ids)).rejects.toThrow(
         'Invalid request IDs',
@@ -165,6 +165,21 @@ describe('workspace navigation and detail reads', () => {
       expect(prisma.userRequest.findMany).not.toHaveBeenCalled();
     },
   );
+
+  it('reads large batches without exceeding the database parameter budget', async () => {
+    const ids = Array.from({ length: 10001 }, (_, index) => String(index));
+    const rows = ids.map((id) => ({ id }));
+    prisma.userRequest.findMany
+      .mockResolvedValueOnce(rows.slice(0, 10000) as any)
+      .mockResolvedValueOnce(rows.slice(10000) as any);
+    expect(await service.requests('owner', ids)).toEqual(rows);
+    expect(prisma.userRequest.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.userRequest.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { userUid: 'owner', id: { in: ['10000'] } },
+      }),
+    );
+  });
 
   it('returns an empty batch without a database read', async () => {
     expect(await service.requests('owner', [])).toEqual([]);

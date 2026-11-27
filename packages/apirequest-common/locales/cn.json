@@ -1453,8 +1453,7 @@
     "url_placeholder": "输入一个 URL 或者粘贴一个 cURL 命令",
     "variables": "变量",
     "view_my_links": "查看我的链接",
-    "generate_name_error": "生成请求名称失败。",
-    "untitled": "未命名"
+    "generate_name_error": "生成请求名称失败。"
   },
   "response": {
     "latest": "最近响应",
@@ -2857,6 +2856,7 @@
     "refresh_failed": "刷新失败，当前保留上次加载的内容。"
   },
   "history_results": {
+    "body_missing": "已保存的响应正文不可用。",
     "automatic": "自动清理",
     "cleaned": "响应结果已清理。",
     "cleaned_report": "已清理 {count} 条结果（{size}）。",
@@ -3425,5 +3425,26 @@
     "disabled": "历史记录已关闭，可使用上方开关启用。",
     "load_failed": "历史记录加载失败",
     "load_failed_description": "暂时无法读取历史记录，请检查连接后重试。已有记录会保留。"
+  },
+  "ui_detail": {
+    "untitled": "未命名请求",
+    "query_failed": "查询失败",
+    "connect_first": "请先连接 WebSocket",
+    "message_first": "请输入消息后发送",
+    "variable_name": "变量名",
+    "initial_value": "初始值",
+    "current_value": "当前值",
+    "description_placeholder": "在此处添加描述…",
+    "authorizing": "正在完成授权…",
+    "no_matches": "没有匹配的记录，请调整或清除筛选。",
+    "loading_capture": "正在读取抓包状态…",
+    "loading_result": "正在读取响应…",
+    "detail_failed": "无法读取这条记录，请重试。",
+    "save_failed": "保存失败，内容已保留，请重试。",
+    "plan_summary": "{iterations} 次迭代 · 延迟 {delay} ms",
+    "enabling": "正在生成连接配置…",
+    "disabling": "正在停用…",
+    "publishing": "正在发布…",
+    "unpublishing": "正在撤销发布…"
   }
 }

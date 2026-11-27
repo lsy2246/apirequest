@@ -35,7 +35,8 @@
             autoScrollEnabled ? t('action.turn_off') : t('action.turn_on')
           }`"
           :icon="IconChevronsDown"
-          :color="autoScrollEnabled ? 'green' : 'red'"
+          :class="{ '!text-accent bg-primaryLight': autoScrollEnabled }"
+          :aria-pressed="autoScrollEnabled"
           @click="autoScrollEnabled = !autoScrollEnabled"
         />
       </div>
@@ -60,13 +61,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, PropType, watch, Ref } from "vue";
-import IconTrash from "~icons/lucide/trash";
-import IconArrowUp from "~icons/lucide/arrow-up";
-import IconArrowDown from "~icons/lucide/arrow-down";
-import IconChevronsDown from "~icons/lucide/chevron-down";
-import { useThrottleFn, useScroll } from "@vueuse/core";
-import { useI18n } from "@composables/i18n";
+import { ref, PropType, watch, Ref } from "vue"
+import IconTrash from "~icons/lucide/trash"
+import IconArrowUp from "~icons/lucide/arrow-up"
+import IconArrowDown from "~icons/lucide/arrow-down"
+import IconChevronsDown from "~icons/lucide/chevron-down"
+import { useThrottleFn, useScroll } from "@vueuse/core"
+import { useI18n } from "@composables/i18n"
 
 export type LogEntryData = {
   prefix?: string

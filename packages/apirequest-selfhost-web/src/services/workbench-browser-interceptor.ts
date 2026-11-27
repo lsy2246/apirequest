@@ -1,3 +1,4 @@
+import { serviceLimitMessage } from "~/helpers/service-limit-error"
 import {
   body,
   type RelayError,
@@ -16,11 +17,12 @@ import {
 } from "@app/platform/auth/web"
 import * as E from "fp-ts/Either"
 
+const RELAY_CONTENT_TYPE = "application/x-workbench-relay"
+
 type RelayResult = {
   status: RelayResponse["status"]
   statusText: string
   headers: Record<string, string>
-  data: string
 }
 
 export class WorkbenchBrowserInterceptor extends BrowserKernelInterceptorService {
@@ -133,10 +135,13 @@ async function sendLocal(
           : { headers: { "content-type": content.mediaType } }
       )
       const blob = await payload.blob()
-      if (blob.size > 32 * 1024 * 1024) {
+      // Keep the client ceiling aligned with the largest allowed server setting.
+      // The relay reports the active policy for smaller configured limits.
+      if (blob.size > 64 * 1024 * 1024) {
         return E.left({
           kind: "network",
-          message: "Request body exceeds 32 MiB",
+          message: "转发请求正文超过 64 MiB 硬上限。",
+          cause: { localRelayStatus: 413 },
         })
       }
       if (multipart || !headers.has("content-type")) {
@@ -176,7 +181,7 @@ async function sendLocal(
         headers: {
           "content-type": "application/json",
           "x-workbench-local": "1",
-          accept: "application/x-workbench-relay",
+          accept: RELAY_CONTENT_TYPE,
         },
         body: requestBody,
         signal,
@@ -197,9 +202,17 @@ async function sendLocal(
     if (!res.ok) {
       if (res.status === 504)
         return E.left({ kind: "timeout", message: "Target request timed out" })
+      const message = serviceLimitMessage(res.status, error, res.headers.get("Retry-After"))
+      if (res.status === 413 || res.status === 429 || res.status === 503) {
+        return E.left({
+          kind: "network",
+          message: message ?? `Local relay HTTP ${res.status}`,
+          cause: { localRelayStatus: res.status },
+        })
+      }
       return E.left({
         kind: error?.kind === "certificate" ? "certificate" : "network",
-        message: `Local relay HTTP ${res.status}`,
+        message: message ?? `Local relay HTTP ${res.status}`,
         cause:
           typeof error?.message === "string" ? error.message : res.statusText,
       })
@@ -267,22 +280,17 @@ async function serializeCertificates(
 }
 
 async function readRelayResult(response: Response) {
-  if (
-    response.headers
-      .get("content-type")
-      ?.startsWith("application/x-workbench-relay")
-  ) {
-    const payload = new Uint8Array(await response.arrayBuffer())
-    const separator = payload.indexOf(10)
-    if (separator < 0) throw new Error("Invalid local relay response")
-    const result = JSON.parse(
-      new TextDecoder().decode(payload.subarray(0, separator))
-    ) as Omit<RelayResult, "data">
-    return { result, bytes: payload.subarray(separator + 1) }
-  }
-  const result: RelayResult = await response.json()
-  const bytes = Uint8Array.from(atob(result.data), (char) => char.charCodeAt(0))
-  return { result, bytes }
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0]
+  if (contentType !== RELAY_CONTENT_TYPE)
+    throw new Error("Unexpected local relay response format")
+
+  const payload = new Uint8Array(await response.arrayBuffer())
+  const separator = payload.indexOf(10)
+  if (separator < 0) throw new Error("Invalid local relay response")
+  const result = JSON.parse(
+    new TextDecoder().decode(payload.subarray(0, separator))
+  ) as RelayResult
+  return { result, bytes: payload.subarray(separator + 1) }
 }
 
 function readBase64(blob: Blob): Promise<string> {

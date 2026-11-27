@@ -32,12 +32,12 @@
 </template>
 
 <script setup lang="ts">
-import axios from "axios";
-import { Ref, onMounted, ref } from "vue";
-import { platform } from "~/platform";
+import axios from "axios"
+import { Ref, onMounted, ref } from "vue"
+import { platform } from "~/platform"
 
-import { useI18n } from "@composables/i18n";
-import { useToast } from "@composables/toast";
+import { useI18n } from "@composables/i18n"
+import { useToast } from "@composables/toast"
 
 export type AccessToken = {
   id: string
@@ -80,10 +80,10 @@ onMounted(async () => {
 const fetchAccessTokens = async () => {
   tokensListLoading.value = true
 
-  const axiosConfig = await getAxiosPlatformConfig()
   const endpoint = `${endpointPrefix}/list?offset=${offset}&limit=${limit}`
 
   try {
+    const axiosConfig = await getAxiosPlatformConfig()
     const { data } = await axios.get(endpoint, axiosConfig)
 
     accessTokens.value.push(...data)
@@ -114,7 +114,6 @@ const generateAccessToken = async ({
 }) => {
   tokenGenerateActionLoading.value = true
 
-  const axiosConfig = await getAxiosPlatformConfig()
   const endpoint = `${endpointPrefix}/create`
 
   const body = {
@@ -123,6 +122,7 @@ const generateAccessToken = async ({
   }
 
   try {
+    const axiosConfig = await getAxiosPlatformConfig()
     const { data }: { data: { token: string; info: AccessToken } } =
       await axios.post(endpoint, body, axiosConfig)
 
@@ -138,7 +138,6 @@ const generateAccessToken = async ({
     }
   } catch (_err) {
     toast.error(t("error.generate_access_token"))
-    showAccessTokensGenerateModal.value = false
   } finally {
     tokenGenerateActionLoading.value = false
   }
@@ -154,10 +153,10 @@ const deleteAccessToken = async () => {
 
   tokenDeleteActionLoading.value = true
 
-  const axiosConfig = await getAxiosPlatformConfig()
   const endpoint = `${endpointPrefix}/revoke?id=${tokenIdToDelete}`
 
   try {
+    const axiosConfig = await getAxiosPlatformConfig()
     await axios.delete(endpoint, axiosConfig)
 
     accessTokens.value = accessTokens.value.filter(
@@ -170,6 +169,8 @@ const deleteAccessToken = async () => {
     toast.success(
       t("access_tokens.deletion_success", { label: tokenLabelToDelete })
     )
+    confirmDeleteAccessToken.value = false
+    tokenToDelete.value = null
 
     // Toggle the error state in case it was set
     if (tokensListFetchErrored.value) {
@@ -179,9 +180,6 @@ const deleteAccessToken = async () => {
     toast.error(t("error.delete_access_token"))
   } finally {
     tokenDeleteActionLoading.value = false
-    confirmDeleteAccessToken.value = false
-
-    tokenToDelete.value = null
   }
 }
 

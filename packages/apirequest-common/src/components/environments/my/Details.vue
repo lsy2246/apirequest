@@ -3,7 +3,7 @@
     v-if="show"
     dialog
     :title="t(`environment.${action}`)"
-    styles="sm:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-[80vw]"
+    styles="!w-[calc(100%-2rem)] sm:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-[80vw]"
     @close="hideModal"
   >
     <template #body>
@@ -120,25 +120,42 @@
 
                 <template v-else>
                   <div
+                    class="grid grid-cols-[repeat(3,minmax(0,1fr))_2.25rem] bg-primaryLight text-xs font-medium text-secondaryDark"
+                    aria-hidden="true"
+                  >
+                    <span class="min-w-0 flex-1 px-4 py-2">{{
+                      t("ui_detail.variable_name")
+                    }}</span>
+                    <span class="min-w-0 flex-1 px-4 py-2">{{
+                      t("ui_detail.initial_value")
+                    }}</span>
+                    <span class="min-w-0 flex-1 px-4 py-2">{{
+                      t("ui_detail.current_value")
+                    }}</span>
+                    <span class="w-9 shrink-0" />
+                  </div>
+                  <div
                     v-for="({ id, env }, index) in tab.variables"
                     :key="`${tab.id}-${id}-${index}`"
-                    class="flex divide-x divide-dividerLight"
+                    class="grid grid-cols-[repeat(3,minmax(0,1fr))_2.25rem] divide-x divide-dividerLight"
                   >
                     <input
                       v-model="env.key"
                       v-focus
-                      class="flex flex-1 bg-transparent px-4 py-2 text-secondaryDark"
+                      class="min-w-0 bg-transparent px-4 py-2 text-secondaryDark"
                       :placeholder="`${t('count.variable', {
                         count: index + 1,
                       })}`"
                       :name="'variable' + index"
+                      :aria-label="t('ui_detail.variable_name')"
                     />
-                    <div class="flex items-center flex-1">
+                    <div class="flex min-w-0 items-center">
                       <SmartEnvInput
                         v-model="env.initialValue"
                         :placeholder="`${t('count.initialValue', { count: index + 1 })}`"
                         :envs="liveEnvs"
                         :name="'initialValue' + index"
+                        :aria-label="t('ui_detail.initial_value')"
                         :secret="tab.isSecret"
                         :select-text-on-mount="
                           env.key ? env.key === editingVariableName : false
@@ -157,12 +174,13 @@
                       />
                     </div>
 
-                    <div class="flex items-center flex-1">
+                    <div class="flex min-w-0 items-center">
                       <SmartEnvInput
                         v-model="env.currentValue"
                         :placeholder="`${t('count.currentValue', { count: index + 1 })}`"
                         :envs="liveEnvs"
                         :name="'currentValue' + index"
+                        :aria-label="t('ui_detail.current_value')"
                         :secret="tab.isSecret"
                         :select-text-on-mount="
                           env.key ? env.key === editingVariableName : false

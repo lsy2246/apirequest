@@ -2,13 +2,21 @@
   <div
     class="workbench-request-modes flex shrink-0 items-center gap-1 overflow-x-auto border-b border-dividerLight bg-primary px-4 py-2.5"
   >
-    <div role="tablist" class="flex shrink-0 gap-1">
+    <div
+      role="tablist"
+      :aria-label="t('workbench.request_definition')"
+      class="flex shrink-0 gap-1"
+      @keydown="navigateTabs"
+    >
       <button
         v-for="mode in visibleModes"
         :key="mode.id"
         type="button"
         role="tab"
         :aria-selected="modelValue === mode.id"
+        :tabindex="modelValue === mode.id ? 0 : -1"
+        :id="`${idPrefix}-${mode.id}`"
+        :aria-controls="`${idPrefix}-panel`"
         class="rounded-md px-3 py-1.5 text-body transition hover:bg-primaryLight"
         :class="
           modelValue === mode.id
@@ -23,12 +31,13 @@
   </div>
 </template>
 <script setup lang="ts">
+import { navigateTabs } from "~/helpers/ui-states"
 import { useI18n } from "~/composables/i18n"
 import { computed } from "vue"
 import { useDocumentationVisibility } from "~/composables/documentationVisibility"
 export type RequestMode =
   "design" | "debug" | "documentation" | "cases" | "load" | "settings"
-defineProps<{ modelValue: RequestMode }>()
+defineProps<{ modelValue: RequestMode; idPrefix: string }>()
 defineEmits<{
   (event: "update:modelValue", value: RequestMode): void
 }>()

@@ -3,7 +3,8 @@
     class="group flex items-stretch"
     @contextmenu.prevent="options!.tippy.show()"
   >
-    <span
+    <button
+      type="button"
       v-tippy="{ theme: 'tooltip', delay: [500, 20] }"
       class="flex w-16 cursor-pointer items-center justify-center truncate px-2"
       :class="entryStatus.className"
@@ -14,21 +15,22 @@
       <span class="truncate text-tiny font-semibold">
         {{ entry.request.method }}
       </span>
-    </span>
-    <span
+    </button>
+    <button
+      type="button"
       v-tippy="{
         theme: 'tooltip',
         delay: [500, 20],
         content: entry.updatedOn ? shortDateTime(entry.updatedOn) : null,
       }"
-      class="flex min-w-0 flex-1 cursor-pointer py-2 pr-2 transition group-hover:text-secondaryDark"
+      class="flex min-w-0 flex-1 cursor-pointer py-2 pr-2 text-left transition group-hover:text-secondaryDark"
       data-testid="restore_history_entry"
       @click="emit('use-entry')"
     >
       <span class="truncate">
         {{ entry.request.endpoint }}
       </span>
-    </span>
+    </button>
     <span>
       <tippy
         ref="options"
@@ -67,14 +69,17 @@
       :icon="IconTrash"
       color="red"
       :title="t('action.remove')"
-      class="hidden group-hover:inline-flex"
+      class="hidden group-hover:inline-flex group-focus-within:inline-flex"
       data-testid="delete_history_entry"
       @click="emit('delete-entry')"
     />
     <HoppButtonSecondary
       v-tippy="{ theme: 'tooltip' }"
       :title="!entry.star ? t('add.star') : t('remove.star')"
-      :class="{ 'hidden group-hover:inline-flex': !entry.star }"
+      :class="{
+        'hidden group-hover:inline-flex group-focus-within:inline-flex':
+          !entry.star,
+      }"
       :icon="entry.star ? IconStarOff : IconStar"
       color="yellow"
       data-testid="star_button"
@@ -84,16 +89,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import findStatusGroup from "~/helpers/findStatusGroup";
-import { useI18n } from "@composables/i18n";
-import { RESTHistoryEntry } from "~/newstore/history";
-import { shortDateTime } from "~/helpers/utils/date";
-import IconSave from "~icons/lucide/save";
-import IconStar from "~icons/lucide/star";
-import IconStarOff from "~icons/hopp/star-off";
-import IconTrash from "~icons/lucide/trash";
-import { TippyComponent } from "vue-tippy";
+import { computed, ref } from "vue"
+import findStatusGroup from "~/helpers/findStatusGroup"
+import { useI18n } from "@composables/i18n"
+import { RESTHistoryEntry } from "~/newstore/history"
+import { shortDateTime } from "~/helpers/utils/date"
+import IconSave from "~icons/lucide/save"
+import IconStar from "~icons/lucide/star"
+import IconStarOff from "~icons/hopp/star-off"
+import IconTrash from "~icons/lucide/trash"
+import { TippyComponent } from "vue-tippy"
 
 const props = defineProps<{
   entry: RESTHistoryEntry

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   LoadTestRunner,
+  LoadTestServiceLimitError,
   LoadTestTimeoutError,
   validateLoadTestConfig,
   type LoadTestConfig,
@@ -21,6 +22,26 @@ const response = (status = 200, durationMs = 10): LoadTestAttempt => ({
 })
 
 describe("工作台压测执行器", () => {
+  it("separates workbench limits from a target returning 429", async () => {
+    let index = 0
+    const steps = [
+      () => Promise.reject(new LoadTestServiceLimitError(429)),
+      () => Promise.reject(new LoadTestServiceLimitError(503)),
+      () => Promise.resolve(response(429)),
+    ]
+    const runner = new LoadTestRunner(() => ({
+      response: steps[index++](),
+      cancel: () => {},
+    }))
+    const pending = runner.run({ ...config, requests: 3 })
+    await vi.runAllTimersAsync()
+    expect((await pending).statuses).toEqual({
+      "429": 1,
+      "workbench-429": 1,
+      "workbench-503": 1,
+    })
+  })
+
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => {
     expect(vi.getTimerCount()).toBe(0)

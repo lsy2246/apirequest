@@ -1,3 +1,4 @@
+import { localRelayStatus } from "~/helpers/request-feedback"
 import { cloneDeep } from "lodash-es";
 import * as E from "fp-ts/Either";
 import type { HoppRESTRequest } from "@apirequest/data";
@@ -7,7 +8,7 @@ import { RESTRequest } from "~/helpers/kernel/rest/request";
 import { getEffectiveRESTRequest } from "~/helpers/utils/EffectiveURL";
 import { getEffectiveVariablesForRequest, filterNonEmptyEnvironmentVariables } from "~/helpers/utils/environments";
 import { getAggregateEnvsWithCurrentValue } from "~/newstore/environments";
-import { LoadTestRunner, LoadTestTimeoutError } from "./runner";
+import { LoadTestRunner, LoadTestServiceLimitError, LoadTestTimeoutError } from "./runner";
 
 export async function prepareLoadTest(
   request: HoppRESTRequest,
@@ -57,8 +58,11 @@ export async function prepareLoadTest(
       cancel: execution.cancel,
       response: execution.response.then((result) => {
         if (E.isLeft(result)) {
-          if (result.left.error.kind === "timeout")
+          const error = result.left.error
+          if (error.kind === "timeout")
             throw new LoadTestTimeoutError("Request timed out")
+          const status = localRelayStatus(error)
+          if (status === 429 || status === 503) throw new LoadTestServiceLimitError(status)
           throw new Error("Network request failed")
         }
         const response = result.right

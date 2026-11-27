@@ -53,11 +53,11 @@ export class WorkbenchEventHub {
     }
   }
 
-  stream(_request: Request, response: Response, owner: string) {
+  stream(_request: Request, response: Response, owner: string, limit = 16) {
     if (
-      [...this.clients.values()].filter((uid) => uid === owner).length >= 16
+      [...this.clients.values()].filter((uid) => uid === owner).length >= limit
     ) {
-      response.status(503).json({ error: 'too_many_streams' });
+      response.status(503).json({ error: 'too_many_streams', limit });
       return;
     }
     response.writeHead(200, {

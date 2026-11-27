@@ -1,22 +1,30 @@
 <template>
-  <div class="flex items-center justify-center">
+  <div
+    class="flex flex-col items-center justify-center gap-3 p-6"
+    role="status"
+    aria-busy="true"
+  >
     <HoppSmartSpinner />
+    <span>{{ t("ui_detail.authorizing") }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "~/composables/i18n";
-import { useToast } from "~/composables/toast";
+import { useI18n } from "~/composables/i18n"
+import { useToast } from "~/composables/toast"
 
-import { useService } from "dioc/vue";
-import * as E from "fp-ts/Either";
-import { onMounted } from "vue";
-import { WorkspaceTabsService } from "~/services/tab/workspace-tabs";
+import { useService } from "dioc/vue"
+import * as E from "fp-ts/Either"
+import { onMounted } from "vue"
+import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
 
-import { useRouter } from "vue-router";
+import { useRouter } from "vue-router"
 
-import { PersistedOAuthConfig, routeOAuthRedirect } from "~/services/oauth/oauth.service";
-import { PersistenceService } from "~/services/persistence";
+import {
+  PersistedOAuthConfig,
+  routeOAuthRedirect,
+} from "~/services/oauth/oauth.service"
+import { PersistenceService } from "~/services/persistence"
 
 const t = useI18n()
 const router = useRouter()

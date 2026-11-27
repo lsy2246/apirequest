@@ -241,6 +241,8 @@ export type HoppRequestDocument = {
    * Options tab preference for the current tab's document
    */
   optionTabPreference?: RESTOptionTabs
+  requestModePreference?:
+    "debug" | "design" | "documentation" | "cases" | "load" | "settings"
 
   /**
    * The inherited properties from the parent collection

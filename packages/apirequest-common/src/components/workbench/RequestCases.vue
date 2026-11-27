@@ -50,6 +50,12 @@
       class="rounded border border-divider p-4 text-secondaryLight"
     >
       {{ t("workbench.case_save_request") }}
+      <HoppButtonSecondary
+        class="ml-3"
+        :label="t('request.save')"
+        outline
+        @click="invokeAction('request-response.save')"
+      />
     </p>
     <form
       v-else-if="draft"
@@ -531,6 +537,7 @@
 </template>
 
 <script setup lang="ts">
+import { invokeAction } from "~/helpers/actions"
 import { useService } from "dioc/vue"
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { cloneDeep } from "lodash-es"

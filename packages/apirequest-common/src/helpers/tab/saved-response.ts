@@ -1,16 +1,23 @@
-import { makeHoppGQLResponseOriginalRequest, makeHoppRESTResponseOriginalRequest, type HoppGQLRequest, type HoppGQLRequestResponse, type HoppRESTRequest, type HoppRESTRequestResponse } from "@apirequest/data";
-import { getResponseBodyText } from "~/composables/lens-actions";
-import type { HoppRESTResponse } from "~/helpers/types/HoppRESTResponse";
-import { getStatusCodeReasonPhrase } from "~/helpers/utils/statusCodes";
-import type { GQLResponseEvent } from "~/services/gql-tab-connection.service";
-import type { HoppGQLRequestDocument, HoppRequestDocument } from "./document";
+import {
+  makeHoppGQLResponseOriginalRequest,
+  makeHoppRESTResponseOriginalRequest,
+  type HoppGQLRequest,
+  type HoppGQLRequestResponse,
+  type HoppRESTRequest,
+  type HoppRESTRequestResponse,
+} from "@apirequest/data"
+import { getResponseBodyText } from "~/composables/lens-actions"
+import type { HoppRESTResponse } from "~/helpers/types/HoppRESTResponse"
+import { getStatusCodeReasonPhrase } from "~/helpers/utils/statusCodes"
+import type { GQLResponseEvent } from "~/services/gql-tab-connection.service"
+import type { HoppGQLRequestDocument, HoppRequestDocument } from "./document"
 
 // 用固定键更新自动保存的响应，切换语言或修改请求名称都不会另建一份。
 export const LATEST_RESPONSE_NAME = "__workbench_latest_response__"
 
 export function makeRESTResponseExample(
   name: string,
-  response: Extract<HoppRESTResponse, { type: "success" | "failure" }>,
+  response: Extract<HoppRESTResponse, { type: "success" | "fail" }>,
   body = getResponseBodyText(response.body),
   request = response.req
 ): HoppRESTRequestResponse {
@@ -74,7 +81,7 @@ export function requestWithLatestRESTResponse(
   const { request, response } = document
   if (
     !response ||
-    (response.type !== "success" && response.type !== "failure") ||
+    (response.type !== "success" && response.type !== "fail") ||
     !response.body.byteLength
   )
     return request

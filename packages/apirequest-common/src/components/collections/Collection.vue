@@ -37,13 +37,15 @@
       >
         <div
           class="flex min-w-0 flex-1 items-center justify-center"
-          @click="() => {
-            if (props.data?.id && remoteFolderErrors.has(props.data.id)) {
-              void retryRemoteFolder(props.data.id).catch(console.error)
-              return
+          @click="
+            () => {
+              if (props.data?.id && remoteFolderErrors.has(props.data.id)) {
+                void retryRemoteFolder(props.data.id).catch(console.error)
+                return
+              }
+              emit('toggle-children')
             }
-            emit('toggle-children')
-          }"
+          "
         >
           <span
             class="pointer-events-none flex items-center justify-center px-4"
@@ -75,16 +77,28 @@
         </div>
 
         <div
-          v-if="(isCollectionLoading && !isOpen) || remoteFolderLoading.has(props.data?.id ?? '')"
+          v-if="
+            (isCollectionLoading && !isOpen) ||
+            remoteFolderLoading.has(props.data?.id ?? '')
+          "
           class="flex items-center px-2"
         >
           <HoppSmartSpinner />
         </div>
-        <span v-else-if="props.data?.id && remoteFolderErrors.has(props.data.id)"
-          class="pr-2 text-tiny text-red-400">加载失败，点击重试</span>
-        <button v-else-if="props.data?.id && remoteFolderHasMore(props.data.id)"
-          type="button" class="pr-2 text-tiny text-secondaryLight hover:text-secondary"
-          @click.stop="void ensureRemoteFolder(props.data.id, true).catch(console.error)">
+        <span
+          v-else-if="props.data?.id && remoteFolderErrors.has(props.data.id)"
+          class="pr-2 text-tiny text-red-400"
+          :title="remoteFolderErrors.get(props.data.id)"
+          >加载失败，点击重试</span
+        >
+        <button
+          v-else-if="props.data?.id && remoteFolderHasMore(props.data.id)"
+          type="button"
+          class="pr-2 text-tiny text-secondaryLight hover:text-secondary"
+          @click.stop="
+            void ensureRemoteFolder(props.data.id, true).catch(console.error)
+          "
+        >
           加载全部以编辑
         </button>
         <div v-else-if="!unloaded" class="flex">
@@ -93,7 +107,7 @@
             v-tippy="{ theme: 'tooltip' }"
             :icon="IconFilePlus"
             :title="t('request.add')"
-            class="hidden group-hover:inline-flex"
+            class="hidden group-hover:inline-flex group-focus-within:inline-flex"
             @click="emit('add-request')"
           />
           <HoppButtonSecondary
@@ -101,7 +115,7 @@
             v-tippy="{ theme: 'tooltip' }"
             :icon="IconFolderPlus"
             :title="t('folder.new')"
-            class="hidden group-hover:inline-flex"
+            class="hidden group-hover:inline-flex group-focus-within:inline-flex"
             @click="emit('add-folder')"
           />
           <span>
@@ -323,12 +337,22 @@ import { useI18n } from "@composables/i18n"
 import { useDocumentationVisibility } from "~/composables/documentationVisibility"
 import { useGqlWorkspaceVisibility } from "~/composables/gqlWorkspaceVisibility"
 import { HoppCollection } from "@apirequest/data"
-import { ensureRemoteFolder, remoteFolderHasMore, remoteFolderLoading, remoteFolderErrors, retryRemoteFolder, usesLazyRemoteCollections } from "~/helpers/remote-collections"
+import {
+  ensureRemoteFolder,
+  remoteFolderHasMore,
+  remoteFolderLoading,
+  remoteFolderErrors,
+  retryRemoteFolder,
+  usesLazyRemoteCollections,
+} from "~/helpers/remote-collections"
 import { isRootRequestCollection } from "~/newstore/collections"
 import { computed, ref, watch } from "vue"
 import { TippyComponent } from "vue-tippy"
 import { useReadonlyStream } from "~/composables/stream"
-import { changeCurrentReorderStatus, currentReorderingStatus$ } from "~/newstore/reordering"
+import {
+  changeCurrentReorderStatus,
+  currentReorderingStatus$,
+} from "~/newstore/reordering"
 import IconCheckCircle from "~icons/lucide/check-circle"
 import IconCopy from "~icons/lucide/copy"
 import IconDownload from "~icons/lucide/download"
@@ -432,9 +456,13 @@ const sortAction = ref<HTMLButtonElement | null>(null)
 const documentationAction = ref<HTMLButtonElement | null>(null)
 const { isDocumentationVisible } = useDocumentationVisibility()
 const { isGqlWorkspaceEnabled } = useGqlWorkspaceVisibility()
-const unloaded = computed(() =>
-  (props.data as HoppCollection & { __workbenchUnloaded?: boolean })?.__workbenchUnloaded === true ||
-  (usesLazyRemoteCollections() && isRootRequestCollection(props.data as HoppCollection)))
+const unloaded = computed(
+  () =>
+    (props.data as HoppCollection & { __workbenchUnloaded?: boolean })
+      ?.__workbenchUnloaded === true ||
+    (usesLazyRemoteCollections() &&
+      isRootRequestCollection(props.data as HoppCollection))
+)
 const dragging = ref(false)
 const ordering = ref(false)
 const orderingLastItem = ref(false)

@@ -28,7 +28,10 @@ function mount() {
     })
   )
   app.component("HoppSmartSpinner", { render: () => h("span") })
-  app.component("HoppButtonSecondary", { render: () => h("button") })
+  app.component("HoppButtonSecondary", {
+    props: ["label"],
+    setup: (props: { label?: string }) => () => h("button", props.label),
+  })
   app.mount(target)
   return target
 }
@@ -105,6 +108,58 @@ describe("history response preview", () => {
         "history_results.error"
       )
     )
+    expect(target.textContent).toContain("422 Unprocessable Entity")
+  })
+  it("explains when a saved response body is gone", async () => {
+    mocks.fetch.mockResolvedValueOnce({ ok: false, status: 404 })
+    const target = mount()
+    await vi.waitFor(() =>
+      expect(target.textContent).toContain("history_results.body_missing")
+    )
+    expect(target.textContent).toContain("422 Unprocessable Entity")
+    expect(target.textContent).not.toContain("history_results.error")
+    expect(target.textContent).not.toContain("action.download_file")
+    expect(target.textContent).not.toContain("action.retry")
+  })
+
+  it("retries a failed detail load and clears the error", async () => {
+    mocks.api.mockRejectedValueOnce(new Error("offline"))
+    const target = mount()
+    await vi.waitFor(() =>
+      expect(target.querySelector('[role="alert"]')).not.toBeNull()
+    )
+    const retry = target.querySelector(
+      '[role="alert"] button'
+    ) as HTMLButtonElement
+    expect(retry.textContent).toBe("action.retry")
+    retry.click()
+    await vi.waitFor(() =>
+      expect(target.querySelector("pre")?.textContent).toBe(
+        '{"message":"你好"}'
+      )
+    )
+    expect(mocks.api).toHaveBeenCalledTimes(2)
+    expect(target.querySelector('[role="alert"]')).toBeNull()
+    expect(target.querySelector('[aria-busy="true"]')).toBeNull()
+  })
+
+  it("retries a failed preview without refetching response metadata", async () => {
+    mocks.fetch.mockRejectedValueOnce(new Error("offline"))
+    const target = mount()
+    await vi.waitFor(() =>
+      expect(target.querySelector('[role="alert"] button')).not.toBeNull()
+    )
+    ;(
+      target.querySelector('[role="alert"] button') as HTMLButtonElement
+    ).click()
+    await vi.waitFor(() =>
+      expect(target.querySelector("pre")?.textContent).toBe(
+        '{"message":"你好"}'
+      )
+    )
+    expect(mocks.fetch).toHaveBeenCalledTimes(2)
+    expect(mocks.api).toHaveBeenCalledTimes(1)
+    expect(target.querySelector('[role="alert"]')).toBeNull()
     expect(target.textContent).toContain("422 Unprocessable Entity")
   })
 })

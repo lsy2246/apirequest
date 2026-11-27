@@ -134,10 +134,24 @@ def main():
                 while data := client.recv(8192):
                     response += data
                 assert b'200 OK' in response and response.endswith(b'{"ok":true}')
-            # 暂停只停止新归档，仍有网络转发；暂停时也可以准备一个新会话。
+            # 暂停释放代理监听，保留归档；恢复继续写原会话。
             state = engine.call('record', {'recording': False})
-            before = page(first)['total']; assert request('/paused')[0] == 200
-            time.sleep(.1); assert page(first)['total'] == before
+            before = page(first)['total']
+            assert not state['recording'] and state['archiveID'] == first
+            with socket.socket() as check:
+                assert check.connect_ex(('127.0.0.1', port)) != 0
+            direct = http.client.HTTPConnection('127.0.0.1', fixture.server_port, timeout=5)
+            try:
+                direct.request('GET', '/paused')
+                assert direct.getresponse().status == 200
+            finally:
+                direct.close()
+            assert page(first)['total'] == before
+            state = engine.call('record', {'recording': True})
+            assert state['archiveID'] == first
+            assert request('/resume-original')[0] == 200
+            until(lambda: page(first)['total'] == before + 1)
+            state = engine.call('record', {'recording': False})
             state = engine.call('new_session'); second = state['archiveID']
             assert second != first and not state['recording']
             engine.call('archive_rename', {'session': second, 'name': '单机验收会话'})

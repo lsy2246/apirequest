@@ -1,9 +1,10 @@
+import { CapacityService } from './capacity/capacity.service';
 import {
   assertLocalWorkspaceRequest,
   getLocalWorkspaceConfig,
 } from './auth/local-workspace/policy';
 import { NestFactory } from '@nestjs/core';
-import { json, raw } from 'express';
+import { json, raw, type Request, type RequestHandler } from 'express';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
@@ -68,39 +69,6 @@ export async function bootstrap() {
 
   warnIfExampleSecrets(configService);
 
-  app.use(
-    '/mock',
-    json({
-      limit: '20mb',
-      strict: false,
-      verify: (req, _res, body) => {
-        (req as any).rawBody = Buffer.from(body);
-      },
-    }),
-  );
-
-  // Increase file upload limit to 100MB
-  app.use(
-    json({
-      limit: '100mb',
-      verify: (req, _res, body) => {
-        if (req.url?.startsWith('/mock/'))
-          (req as any).rawBody = Buffer.from(body);
-      },
-    }),
-  );
-
-  app.use(
-    '/mock',
-    raw({
-      type: () => true,
-      limit: '20mb',
-      verify: (req, _res, body) => {
-        (req as any).rawBody = Buffer.from(body);
-      },
-    }),
-  );
-
   const localWorkspace = getLocalWorkspaceConfig(configService);
   // 固定单人工作区，所有会话和写操作使用同一份来源边界。
   app.use((req, res, next) => {
@@ -124,7 +92,51 @@ export async function bootstrap() {
         .json({ message: 'Local workspace request is not allowed' });
     }
   });
-  app.enableCors({ origin: localWorkspace.origins, credentials: true });
+  app.enableCors({
+    origin: localWorkspace.origins,
+    credentials: true,
+    exposedHeaders: ['Retry-After', 'X-Workbench-Detail-Batch-Size'],
+  });
+  app.use(
+    '/mock',
+    json({
+      limit: '20mb',
+      strict: false,
+      verify: (req, _res, body) => {
+        (req as any).rawBody = Buffer.from(body);
+      },
+    }),
+  );
+
+  const capacity = app.get(CapacityService);
+  const parseJson: RequestHandler = (
+    req: Request & { rawBody?: Buffer; workbenchImportBytes?: number },
+    res,
+    next,
+  ) => {
+    const workspaceImport =
+      /^\/v1\/workbench-mcp\/data\/workspace\/import\/?$/i.test(req.path);
+    json({
+      limit: capacity.jsonBodyLimit(req.path),
+      verify: (_request, _response, body) => {
+        if (req.path.startsWith('/mock/'))
+          req.rawBody = Buffer.from(body);
+        if (workspaceImport) req.workbenchImportBytes = body.length;
+      },
+    })(req, res, next);
+  };
+  app.use(parseJson);
+
+  app.use(
+    '/mock',
+    raw({
+      type: () => true,
+      limit: '20mb',
+      verify: (req, _res, body) => {
+        (req as any).rawBody = Buffer.from(body);
+      },
+    }),
+  );
   app.use(compression({
     level: 4,
     filter: (req, res) =>

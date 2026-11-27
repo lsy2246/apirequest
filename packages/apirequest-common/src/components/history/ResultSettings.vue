@@ -23,7 +23,7 @@
       @close="showCleanup = false"
     >
       <template #body>
-        <div class="flex flex-col gap-5">
+        <fieldset :disabled="busy" class="flex min-w-0 flex-col gap-5">
           <section class="flex flex-col gap-3">
             <h3 class="font-semibold text-secondaryDark">
               {{ t("history_results.automatic") }}
@@ -40,7 +40,7 @@
                   min="1"
                   max="36500"
                   list="history-retention-days"
-                  class="w-20 rounded border border-divider bg-primary px-2 py-1"
+                  class="w-20 rounded border border-divider bg-primary px-3 h-9"
                 />
               </label>
               <datalist id="history-retention-days">
@@ -56,7 +56,7 @@
               <input
                 v-model="search"
                 type="search"
-                class="rounded border border-divider bg-primary px-2 py-1"
+                class="rounded border border-divider bg-primary px-3 h-9"
                 :placeholder="t('action.search')"
               />
             </label>
@@ -102,6 +102,7 @@
               <HoppButtonPrimary
                 :label="t('action.save')"
                 :disabled="busy || !validDays(retentionDays)"
+                :loading="operation === 'save'"
                 @click="saveCleanupPolicy"
               />
             </div>
@@ -118,13 +119,13 @@
                   type="number"
                   min="1"
                   max="36500"
-                  class="w-20 rounded border border-divider bg-primary px-2 py-1"
+                  class="w-20 rounded border border-divider bg-primary px-3 h-9"
                 />
               </label>
               <select
                 v-model="kind"
                 :aria-label="t('history_results.result_type')"
-                class="rounded border border-divider bg-primary px-2 py-1"
+                class="rounded border border-divider bg-primary px-3 h-9"
               >
                 <option value="">{{ t("filter.all") }}</option>
                 <option v-for="type in kinds" :key="type" :value="type">
@@ -135,6 +136,7 @@
                 :label="t('history_results.preview_cleanup')"
                 :disabled="busy || policyDirty || !validDays(days)"
                 outline
+                :loading="operation === 'preview'"
                 @click="previewCleanup"
               />
             </div>
@@ -153,6 +155,7 @@
               <HoppButtonPrimary
                 :label="t('history_results.confirm_cleanup')"
                 :disabled="busy || policyDirty"
+                :loading="operation === 'cleanup'"
                 @click="executeCleanup"
               />
             </div>
@@ -168,7 +171,7 @@
               {{ t("history_results.error") }}
             </p>
           </section>
-        </div>
+        </fieldset>
       </template>
     </HoppSmartModal>
   </div>
@@ -195,6 +198,7 @@ const { entries } = useWorkbenchCollections()
 
 const policy = ref<HistoryResultPolicy>()
 const busy = ref(false)
+const operation = ref("")
 const error = ref(false)
 const showCleanup = ref(false)
 const autoCleanup = ref(false)
@@ -259,9 +263,10 @@ function syncPolicy(value: HistoryResultPolicy) {
   excluded.value = [...value.excludedRequestIds]
 }
 
-async function execute(action: () => Promise<void>) {
+async function execute(action: () => Promise<void>, name = "load") {
   if (busy.value) return
   busy.value = true
+  operation.value = name
   error.value = false
   try {
     await action()
@@ -269,6 +274,7 @@ async function execute(action: () => Promise<void>) {
     error.value = true
   } finally {
     busy.value = false
+    operation.value = ""
   }
 }
 
@@ -299,7 +305,7 @@ function saveCleanupPolicy() {
       )
     )
     preview.value = undefined
-  })
+  }, "save")
 }
 
 const criteria = () => ({ days: days.value, kind: kind.value || undefined })
@@ -319,7 +325,7 @@ function previewCleanup() {
     ) {
       preview.value = report
     }
-  })
+  }, "preview")
 }
 
 function executeCleanup() {
@@ -332,7 +338,7 @@ function executeCleanup() {
     )
     preview.value = undefined
     policy.value = await historyResultAPI<HistoryResultPolicy>("policy")
-  })
+  }, "cleanup")
 }
 
 watch([days, kind, policyDirty], () => {

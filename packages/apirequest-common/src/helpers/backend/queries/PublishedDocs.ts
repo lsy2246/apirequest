@@ -1,10 +1,21 @@
-import { backendOperation } from "~/helpers/backend/operation";
-import * as TE from "fp-ts/TaskEither";
-import * as E from "fp-ts/Either";
-import { runGQLQuery } from "../GQLClient";
-import type { UserPublishedDocsListQuery, PublishedDocs, PublishedDocQuery as GqlPublishedDocQuery } from "../graphql";
-import { HoppCollection, HoppGQLRequest, HoppRESTRequest, makeCollection, parseGQLRequest, parseRESTRequest } from "@apirequest/data";
-import type { CollectionDataProps } from "../helpers";
+import { backendOperation } from "~/helpers/backend/operation"
+import * as TE from "fp-ts/TaskEither"
+import * as E from "fp-ts/Either"
+import { runGQLQuery } from "../GQLClient"
+import type {
+  UserPublishedDocsListQuery,
+  PublishedDocs,
+  PublishedDocQuery as GqlPublishedDocQuery,
+} from "../graphql"
+import {
+  HoppCollection,
+  HoppGQLRequest,
+  HoppRESTRequest,
+  makeCollection,
+  parseGQLRequest,
+  parseRESTRequest,
+} from "@apirequest/data"
+import type { CollectionDataProps } from "../helpers"
 type GetUserPublishedDocsError = "user/not_authenticated"
 type GetTeamPublishedDocsError = "team/not_found" | "team/access_denied"
 // Type for a published doc item returned from list queries
@@ -199,7 +210,9 @@ export const findPublishedDocForCollection = (
   )(query)
 }
 type GetPublishedDocError =
-  "published_docs/not_found" | "published_docs/unauthorized"
+  | "published_docs/not_found"
+  | "published_docs/unauthorized"
+  | "published_docs/load_failed"
 // Get a single published doc by ID (GraphQL)
 export const getPublishedDocByID = (id: string) =>
   TE.tryCatch(
@@ -237,12 +250,25 @@ export const getPublishedDocBySlugREST = (
         : `${backendUrl}/published-docs/${slug}`
       const response = await fetch(url)
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw Object.assign(
+          new Error(`HTTP error! status: ${response.status}`),
+          { status: response.status }
+        )
       }
       return await response.json()
     },
     (error) => {
       console.error("Error fetching published doc via REST:", error)
-      return "published_docs/not_found" as GetPublishedDocError
+      const status =
+        error && typeof error === "object" && "status" in error
+          ? error.status
+          : undefined
+      return (
+        status === 404 || status === 410
+          ? "published_docs/not_found"
+          : status === 401 || status === 403
+            ? "published_docs/unauthorized"
+            : "published_docs/load_failed"
+      ) as GetPublishedDocError
     }
   )

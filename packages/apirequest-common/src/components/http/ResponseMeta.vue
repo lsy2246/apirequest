@@ -175,6 +175,12 @@ const failure = computed(() => {
   }
   const transport = transportError.value
   if (!transport || transport.kind === "cancelled") return null
+  if (transport.kind === "service-limit")
+    return {
+      heading: "工作台服务限制",
+      description: transport.detail,
+      detail: "",
+    }
   if (transport.kind === "timeout")
     return {
       heading: t("workbench.request_timeout"),

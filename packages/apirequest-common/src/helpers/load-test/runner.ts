@@ -14,6 +14,11 @@ export type LoadTestAttempt = {
 
 // 区分传输层已报告的超时与普通断网，不重复取消已结束的传输。
 export class LoadTestTimeoutError extends Error {}
+export class LoadTestServiceLimitError extends Error {
+  constructor(readonly status: 429 | 503) {
+    super(`Local relay HTTP ${status}`)
+  }
+}
 
 export type LoadTestExecution = {
   response: Promise<LoadTestAttempt>
@@ -192,7 +197,9 @@ export class LoadTestRunner {
             ? "timeout"
             : result.type === "error"
               ? "network"
-              : String(status)
+              : result.type === "service-limit"
+                ? `workbench-${result.status}`
+                : String(status)
         report.completed++
         if (success) report.succeeded++
         else report.failed++
@@ -260,6 +267,7 @@ export class LoadTestRunner {
   ): Promise<
     | { type: "response"; value: LoadTestAttempt }
     | { type: "error" | "timeout" | "cancelled" }
+    | { type: "service-limit"; status: 429 | 503 }
   > {
     return new Promise((resolve) => {
       let settled = false
@@ -294,10 +302,11 @@ export class LoadTestRunner {
         timer = setTimeout(() => finish({ type: "timeout" }, true), timeoutMs)
         execution.response.then(
           (value) => finish({ type: "response", value }),
-          (error) =>
-            finish({
-              type: error instanceof LoadTestTimeoutError ? "timeout" : "error",
-            })
+          (error) => {
+            if (error instanceof LoadTestServiceLimitError)
+              finish({ type: "service-limit", status: error.status })
+            else finish({ type: error instanceof LoadTestTimeoutError ? "timeout" : "error" })
+          }
         )
       } catch {
         finish({ type: "error" })

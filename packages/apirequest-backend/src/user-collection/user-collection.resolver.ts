@@ -1,3 +1,5 @@
+import { GraphQLError } from 'graphql';
+import { CapacityService, MIB } from 'src/capacity/capacity.service';
 import { UseGuards } from '@nestjs/common';
 import { Resolver, Mutation, Args, ID, Query, ResolveField, Parent, Subscription } from '@nestjs/graphql';
 import { GqlUser } from 'src/decorators/gql-user.decorator';
@@ -21,6 +23,7 @@ export class UserCollectionResolver {
   constructor(
     private readonly userCollectionService: UserCollectionService,
     private readonly pubSub: PubSubService,
+    private readonly capacity: CapacityService,
   ) {}
 
   // Field Resolvers
@@ -288,6 +291,11 @@ export class UserCollectionResolver {
     @Args() args: ImportUserCollectionsFromJSONArgs,
     @GqlUser() user: AuthUser,
   ) {
+    const limitMiB = this.capacity.current.collectionImportMiB;
+    if (Buffer.byteLength(args.jsonString) > limitMiB * MIB)
+      throw new GraphQLError(`Collection import exceeds ${limitMiB} MiB`, {
+        extensions: { code: 'COLLECTION_IMPORT_TOO_LARGE', limitMiB },
+      });
     const importedCollection =
       await this.userCollectionService.importCollectionsFromJSON(
         args.jsonString,

@@ -161,24 +161,30 @@ export class WorkspaceIndexService {
   async requests(userUid: string, ids: unknown) {
     if (
       !Array.isArray(ids) ||
-      ids.length > 10000 ||
       ids.some((id) => typeof id !== 'string' || !id || id.length > 200)
     )
       throw new BadRequestException('Invalid request IDs');
     const unique = [...new Set(ids as string[])];
-    if (!unique.length) return [];
-    const rows = await this.prisma.userRequest.findMany({
-      where: { userUid, id: { in: unique } },
-      select: {
-        id: true,
-        title: true,
-        collectionID: true,
-        request: true,
-        updatedOn: true,
-      },
-    });
-    if (rows.length !== unique.length)
-      throw new NotFoundException('Request not found');
+    const select = {
+      id: true,
+      title: true,
+      collectionID: true,
+      request: true,
+      updatedOn: true,
+    } as const;
+    const rows: Prisma.UserRequestGetPayload<{ select: typeof select }>[] = [];
+    // Split SQL queries to stay below the database's bind parameter limit.
+    const querySize = 10000;
+    for (let start = 0; start < unique.length; start += querySize) {
+      const batch = unique.slice(start, start + querySize);
+      const found = await this.prisma.userRequest.findMany({
+        where: { userUid, id: { in: batch } },
+        select,
+      });
+      if (found.length !== batch.length)
+        throw new NotFoundException('Request not found');
+      rows.push(...found);
+    }
     return rows;
   }
 }
